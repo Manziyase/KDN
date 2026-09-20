@@ -343,19 +343,339 @@
       color: #003366;
       font-weight: 500;
     }
+    /* ---------- Screens & router ---------- */
+    .screen {
+      display: none;
+    }
+
+    .screen.active {
+      display: block;
+      animation: screenIn 0.18s ease;
+    }
+
+    @keyframes screenIn {
+      from {
+        opacity: 0;
+        transform: translateX(12px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    [data-nav]:focus-visible,
+    .nav-item:focus-visible {
+      outline: 2px solid #003366;
+      outline-offset: 2px;
+      border-radius: 8px;
+    }
+
+    .bell {
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 8px;
+    }
+
+    .alert-card {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .alert-card:active {
+      transform: scale(0.98);
+    }
+
+    .alert-chevron {
+      margin-left: auto;
+      color: #92400e;
+      opacity: 0.5;
+      flex-shrink: 0;
+    }
+
+    .action-btn,
+    .nav-item,
+    .chip,
+    .row[data-nav] {
+      user-select: none;
+    }
+
+    /* ---------- Sub-screen header ---------- */
+    .sub-header {
+      background: #003366;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .sub-back {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.12);
+      flex-shrink: 0;
+    }
+
+    .sub-back:active {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .sub-title {
+      font-size: 16px;
+      font-weight: 500;
+      flex: 1;
+    }
+
+    .sub-action {
+      font-size: 13px;
+      color: #7fd4a8;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    /* ---------- Lists ---------- */
+    .list-card {
+      background: var(--color-background-primary);
+      border-radius: 14px;
+      border: 0.5px solid var(--color-border-tertiary);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 0.5px solid #eef0f3;
+    }
+
+    .row:last-child {
+      border-bottom: none;
+    }
+
+    .row[data-nav] {
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .row[data-nav]:active {
+      background: var(--color-background-secondary);
+    }
+
+    .row-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+
+    .row-icon.green { background: #e8f7f0; color: #00A86B; }
+    .row-icon.red { background: #fdecea; color: #e53935; }
+    .row-icon.blue { background: #e8eef7; color: #003366; }
+    .row-icon.amber { background: #fff8e1; color: #f59e0b; }
+    .row-icon.purple { background: #eeedfe; color: #534AB7; }
+    .row-icon.teal { background: #e1f5ee; color: #0F6E56; }
+    .row-icon.pink { background: #fbeaf0; color: #993556; }
+
+    .row-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .row-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+    }
+
+    .row-sub {
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      margin-top: 2px;
+    }
+
+    .row-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .row-val.pos { color: #00A86B; }
+    .row-val.neg { color: #e53935; }
+
+    .badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 20px;
+      flex-shrink: 0;
+    }
+
+    .badge.low { background: #fdecea; color: #e53935; }
+    .badge.ok { background: #e8f7f0; color: #00A86B; }
+
+    /* ---------- Forms ---------- */
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 0.5px solid var(--color-border-tertiary);
+      background: var(--color-background-primary);
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--color-text-primary);
+      outline: none;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      border-color: #003366;
+    }
+
+    .chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 8px 14px;
+      border-radius: 20px;
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-tertiary);
+      font-size: 12px;
+      color: var(--color-text-primary);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .chip.selected {
+      background: #003366;
+      border-color: #003366;
+      color: white;
+    }
+
+    .total-box {
+      background: #003366;
+      color: white;
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .t-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 4px;
+    }
+
+    .t-val {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: #00A86B;
+      color: white;
+      border: none;
+      border-radius: 14px;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      user-select: none;
+      transition: transform 0.1s;
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    /* ---------- Toast ---------- */
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: 28px;
+      transform: translateX(-50%) translateY(20px);
+      background: #1a1a1a;
+      color: white;
+      font-size: 13px;
+      padding: 10px 18px;
+      border-radius: 24px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s, transform 0.25s;
+      z-index: 50;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+      max-width: 90vw;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
   </style>
 </head>
 
 <body>
 
   <div class="phone">
+
+    <!-- ================= HOME ================= -->
+    <section class="screen active" id="view-home">
     <div class="header">
       <div class="header-top">
         <div class="logo">
           <div class="logo-dot"></div>
           <span class="logo-text">BizTrack Lite · KDN</span>
         </div>
-        <i class="ti ti-bell" style="font-size:20px; color:rgba(255,255,255,0.7);" aria-hidden="true"></i>
+        <div class="bell" data-nav="notifications" role="button" tabindex="0" aria-label="Notifications">
+          <i class="ti ti-bell" style="font-size:20px; color:rgba(255,255,255,0.7);" aria-hidden="true"></i>
+        </div>
       </div>
       <div class="shop-name">Jean's Duka</div>
       <div class="shop-sub">Remera, Kigali · Monday 23 June 2026</div>
@@ -382,12 +702,13 @@
     </div>
 
     <div class="body">
-      <div class="alert-card">
+      <div class="alert-card" data-nav="notifications" role="button" tabindex="0" aria-label="View notifications">
         <i class="ti ti-alert-triangle alert-icon" aria-hidden="true"></i>
         <div class="alert-text">
           <strong>2 items need restocking</strong>
           Matches (box) · Soap Bar
-        </div>
+          </div>
+          <i class="ti ti-chevron-right alert-chevron" aria-hidden="true"></i>
       </div>
 
       <div class="section-label">Key metrics</div>
@@ -416,33 +737,458 @@
 
       <div class="section-label">Quick actions</div>
       <div class="actions-grid">
-        <div class="action-btn" onclick="window.location.href='#new-sale'">
+        <div class="action-btn" data-nav="new-sale" role="button" tabindex="0">
           <div class="action-icon green"><i class="ti ti-shopping-cart" aria-hidden="true"></i></div>
           <span class="action-label">New sale</span>
         </div>
-        <div class="action-btn" onclick="window.location.href='#new-expense'">
+        <div class="action-btn" data-nav="new-expense" role="button" tabindex="0">
           <div class="action-icon red"><i class="ti ti-receipt" aria-hidden="true"></i></div>
           <span class="action-label">New expense</span>
         </div>
-        <div class="action-btn" onclick="window.location.href='#inventory'">
+        <div class="action-btn" data-nav="inventory" role="button" tabindex="0">
           <div class="action-icon blue"><i class="ti ti-box" aria-hidden="true"></i></div>
           <span class="action-label">Inventory</span>
         </div>
-        <div class="action-btn" onclick="window.location.href='#customers'">
+        <div class="action-btn" data-nav="customers" role="button" tabindex="0">
           <div class="action-icon purple"><i class="ti ti-user-check" aria-hidden="true"></i></div>
           <span class="action-label">Customers</span>
         </div>
-        <div class="action-btn" onclick="window.location.href='#ledger'">
+        <div class="action-btn" data-nav="ledger" role="button" tabindex="0">
           <div class="action-icon teal"><i class="ti ti-book" aria-hidden="true"></i></div>
           <span class="action-label">Cash ledger</span>
         </div>
-        <div class="action-btn" onclick="window.location.href='#add-payment'">
+        <div class="action-btn" data-nav="add-payment" role="button" tabindex="0">
           <div class="action-icon pink"><i class="ti ti-coin" aria-hidden="true"></i></div>
           <span class="action-label">Add payment</span>
         </div>
       </div>
     </div>
 
+    </section>
+
+    <!-- ================= NEW SALE ================= -->
+    <section class="screen" id="view-new-sale">
+      <div class="sub-header">
+        <div class="sub-back" data-nav="back" role="button" tabindex="0" aria-label="Go back">
+          <i class="ti ti-chevron-left" aria-hidden="true"></i>
+        </div>
+        <div class="sub-title">New sale</div>
+      </div>
+      <div class="body">
+        <div class="field">
+          <label for="sale-item">Item</label>
+          <select id="sale-item">
+            <option value="matches" data-price="500">Matches (box) — RWF 500</option>
+            <option value="soap" data-price="700">Soap bar — RWF 700</option>
+            <option value="milk" data-price="800">Milk 500ml — RWF 800</option>
+            <option value="sugar" data-price="1600">Sugar 1kg — RWF 1,600</option>
+            <option value="rice" data-price="2000">Rice 1kg — RWF 2,000</option>
+            <option value="oil" data-price="3500">Cooking oil 1L — RWF 3,500</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="sale-qty">Quantity</label>
+          <input id="sale-qty" type="number" min="1" value="1" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>Payment method</label>
+          <div class="chips" id="sale-pay">
+            <div class="chip selected">Cash</div>
+            <div class="chip">MoMo</div>
+            <div class="chip">Credit</div>
+          </div>
+        </div>
+        <div class="field" id="sale-customer-field" style="display:none;">
+          <label for="sale-customer">Customer (credit)</label>
+          <select id="sale-customer">
+            <option>Amina U.</option>
+            <option>Jean Bosco</option>
+            <option>Claudine M.</option>
+          </select>
+        </div>
+        <div class="total-box">
+          <div>
+            <div class="t-label">Total</div>
+            <div class="t-val" id="sale-total">RWF 500</div>
+          </div>
+          <i class="ti ti-shopping-cart" style="font-size:24px;opacity:.5" aria-hidden="true"></i>
+        </div>
+        <button class="btn-primary js-save" type="button" data-msg="Sale saved ✓">
+          <i class="ti ti-check" aria-hidden="true"></i>Save sale
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= NEW EXPENSE ================= -->
+    <section class="screen" id="view-new-expense">
+      <div class="sub-header">
+        <div class="sub-back" data-nav="back" role="button" tabindex="0" aria-label="Go back">
+          <i class="ti ti-chevron-left" aria-hidden="true"></i>
+        </div>
+        <div class="sub-title">New expense</div>
+      </div>
+      <div class="body">
+        <div class="field">
+          <label>Category</label>
+          <div class="chips">
+            <div class="chip selected">Transport</div>
+            <div class="chip">Stock</div>
+            <div class="chip">Airtime</div>
+            <div class="chip">Staff</div>
+            <div class="chip">Rent</div>
+            <div class="chip">Other</div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="expense-amount">Amount (RWF)</label>
+          <input id="expense-amount" type="number" min="0" placeholder="0" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label for="expense-note">Note</label>
+          <input id="expense-note" type="text" placeholder="e.g. Taxi to market">
+        </div>
+        <button class="btn-primary js-save" type="button" data-msg="Expense saved ✓" data-after="expenses">
+          <i class="ti ti-check" aria-hidden="true"></i>Save expense
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= INVENTORY ================= -->
+    <section class="screen" id="view-inventory">
+      <div class="sub-header">
+        <div class="sub-back" data-nav="back" role="button" tabindex="0" aria-label="Go back">
+          <i class="ti ti-chevron-left" aria-hidden="true"></i>
+        </div>
+        <div class="sub-title">Inventory</div>
+        <div class="sub-action" data-toast="Demo: add-item form not included">+ Add</div>
+      </div>
+      <div class="body">
+        <div class="section-label">6 items · 2 need restocking</div>
+        <div class="list-card">
+          <div class="row">
+            <div class="row-icon blue"><i class="ti ti-box" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Matches (box)</div>
+              <div class="row-sub">RWF 500 · 32 sold this week</div>
+            </div>
+            <span class="row-val">4 left</span>
+            <span class="badge low">Restock</span>
+          </div>
+          <div class="row">
+            <div class="row-icon blue"><i class="ti ti-box" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Soap bar</div>
+              <div class="row-sub">RWF 700 · 21 sold this week</div>
+            </div>
+            <span class="row-val">6 left</span>
+            <span class="badge low">Restock</span>
+          </div>
+          <div class="row">
+            <div class="row-icon blue"><i class="ti ti-box" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Milk 500ml</div>
+              <div class="row-sub">RWF 800 · 15 sold this week</div>
+            </div>
+            <span class="row-val">9 left</span>
+            <span class="badge ok">OK</span>
+          </div>
+          <div class="row">
+            <div class="row-icon blue"><i class="ti ti-box" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Sugar 1kg</div>
+              <div class="row-sub">RWF 1,600 · 11 sold this week</div>
+            </div>
+            <span class="row-val">12 left</span>
+            <span class="badge ok">OK</span>
+          </div>
+          <div class="row">
+            <div class="row-icon blue"><i class="ti ti-box" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Rice 1kg</div>
+              <div class="row-sub">RWF 2,000 · 8 sold this week</div>
+            </div>
+            <span class="row-val">18 left</span>
+            <span class="badge ok">OK</span>
+          </div>
+          <div class="row">
+            <div class="row-icon blue"><i class="ti ti-box" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Cooking oil 1L</div>
+              <div class="row-sub">RWF 3,500 · 5 sold this week</div>
+            </div>
+            <span class="row-val">24 left</span>
+            <span class="badge ok">OK</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CUSTOMERS ================= -->
+    <section class="screen" id="view-customers">
+      <div class="sub-header">
+        <div class="sub-back" data-nav="back" role="button" tabindex="0" aria-label="Go back">
+          <i class="ti ti-chevron-left" aria-hidden="true"></i>
+        </div>
+        <div class="sub-title">Customers</div>
+      </div>
+      <div class="body">
+        <div class="section-label">3 customers owe · RWF 4,550 total</div>
+        <div class="list-card">
+          <div class="row" data-nav="add-payment" role="button" tabindex="0" aria-label="Record payment for Amina U.">
+            <div class="row-icon purple"><i class="ti ti-user" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Amina U.</div>
+              <div class="row-sub">Last payment 11 Jun · tap to record payment</div>
+            </div>
+            <span class="row-val neg">RWF 2,500</span>
+          </div>
+          <div class="row" data-nav="add-payment" role="button" tabindex="0" aria-label="Record payment for Jean Bosco">
+            <div class="row-icon purple"><i class="ti ti-user" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Jean Bosco</div>
+              <div class="row-sub">Last payment 18 Jun · tap to record payment</div>
+            </div>
+            <span class="row-val neg">RWF 1,200</span>
+          </div>
+          <div class="row" data-nav="add-payment" role="button" tabindex="0" aria-label="Record payment for Claudine M.">
+            <div class="row-icon purple"><i class="ti ti-user" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Claudine M.</div>
+              <div class="row-sub">Last payment 20 Jun · tap to record payment</div>
+            </div>
+            <span class="row-val neg">RWF 850</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CASH LEDGER ================= -->
+    <section class="screen" id="view-ledger">
+      <div class="sub-header">
+        <div class="sub-back" data-nav="back" role="button" tabindex="0" aria-label="Go back">
+          <i class="ti ti-chevron-left" aria-hidden="true"></i>
+        </div>
+        <div class="sub-title">Cash ledger</div>
+        <div class="sub-action" data-toast="Day report exported (demo)">Export</div>
+      </div>
+      <div class="body">
+        <div class="section-label">Today · 23 June 2026</div>
+        <div class="list-card">
+          <div class="row">
+            <div class="row-icon blue"><i class="ti ti-cash" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Opening float</div>
+              <div class="row-sub">08:00</div>
+            </div>
+            <span class="row-val">53,400</span>
+          </div>
+          <div class="row">
+            <div class="row-icon green"><i class="ti ti-shopping-cart" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Sale #142</div>
+              <div class="row-sub">09:12 · Cash</div>
+            </div>
+            <span class="row-val pos">+6,500</span>
+          </div>
+          <div class="row">
+            <div class="row-icon green"><i class="ti ti-shopping-cart" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Sale #143</div>
+              <div class="row-sub">10:05 · Cash</div>
+            </div>
+            <span class="row-val pos">+12,400</span>
+          </div>
+          <div class="row">
+            <div class="row-icon red"><i class="ti ti-truck" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Transport</div>
+              <div class="row-sub">11:30 · Cash out</div>
+            </div>
+            <span class="row-val neg">−2,000</span>
+          </div>
+          <div class="row">
+            <div class="row-icon red"><i class="ti ti-users" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Staff lunch</div>
+              <div class="row-sub">12:15 · Cash out</div>
+            </div>
+            <span class="row-val neg">−3,200</span>
+          </div>
+          <div class="row">
+            <div class="row-icon green"><i class="ti ti-shopping-cart" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Sale #144</div>
+              <div class="row-sub">13:20 · MoMo</div>
+            </div>
+            <span class="row-val pos">+12,100</span>
+          </div>
+          <div class="row">
+            <div class="row-icon red"><i class="ti ti-phone" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Airtime</div>
+              <div class="row-sub">14:00 · Cash out</div>
+            </div>
+            <span class="row-val neg">−1,000</span>
+          </div>
+          <div class="row">
+            <div class="row-icon blue"><i class="ti ti-book" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Closing balance</div>
+              <div class="row-sub">Auto-computed at day close</div>
+            </div>
+            <span class="row-val">134,950</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ADD PAYMENT ================= -->
+    <section class="screen" id="view-add-payment">
+      <div class="sub-header">
+        <div class="sub-back" data-nav="back" role="button" tabindex="0" aria-label="Go back">
+          <i class="ti ti-chevron-left" aria-hidden="true"></i>
+        </div>
+        <div class="sub-title">Add payment</div>
+      </div>
+      <div class="body">
+        <div class="field">
+          <label for="pay-customer">Customer</label>
+          <select id="pay-customer">
+            <option data-balance="2500">Amina U. — owes 2,500</option>
+            <option data-balance="1200">Jean Bosco — owes 1,200</option>
+            <option data-balance="850">Claudine M. — owes 850</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="pay-amount">Amount (RWF)</label>
+          <input id="pay-amount" type="number" min="0" placeholder="0" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>Method</label>
+          <div class="chips">
+            <div class="chip selected">Cash</div>
+            <div class="chip">MoMo</div>
+            <div class="chip">Bank</div>
+          </div>
+        </div>
+        <div class="total-box">
+          <div>
+            <div class="t-label">Remaining balance</div>
+            <div class="t-val" id="pay-remaining">RWF 2,500</div>
+          </div>
+          <i class="ti ti-coin" style="font-size:24px;opacity:.5" aria-hidden="true"></i>
+        </div>
+        <button class="btn-primary js-save" type="button" data-msg="Payment recorded ✓" data-after="customers">
+          <i class="ti ti-check" aria-hidden="true"></i>Record payment
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= EXPENSES ================= -->
+    <section class="screen" id="view-expenses">
+      <div class="sub-header">
+        <div class="sub-back" data-nav="back" role="button" tabindex="0" aria-label="Go back">
+          <i class="ti ti-chevron-left" aria-hidden="true"></i>
+        </div>
+        <div class="sub-title">Expenses</div>
+      </div>
+      <div class="body">
+        <div class="total-box">
+          <div>
+            <div class="t-label">Total today</div>
+            <div class="t-val">RWF 7,000</div>
+          </div>
+          <i class="ti ti-receipt" style="font-size:24px;opacity:.5" aria-hidden="true"></i>
+        </div>
+        <div class="section-label">4 entries today</div>
+        <div class="list-card">
+          <div class="row">
+            <div class="row-icon red"><i class="ti ti-truck" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Transport</div>
+              <div class="row-sub">11:30 · Taxi to market</div>
+            </div>
+            <span class="row-val neg">−2,000</span>
+          </div>
+          <div class="row">
+            <div class="row-icon red"><i class="ti ti-users" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Staff lunch</div>
+              <div class="row-sub">12:15 · 2 workers</div>
+            </div>
+            <span class="row-val neg">−3,200</span>
+          </div>
+          <div class="row">
+            <div class="row-icon red"><i class="ti ti-phone" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Airtime</div>
+              <div class="row-sub">14:00 · MTN</div>
+            </div>
+            <span class="row-val neg">−1,000</span>
+          </div>
+          <div class="row">
+            <div class="row-icon red"><i class="ti ti-shopping-bag" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Plastic bags</div>
+              <div class="row-sub">16:40 · Restock supplies</div>
+            </div>
+            <span class="row-val neg">−800</span>
+          </div>
+        </div>
+        <button class="btn-primary" type="button" data-nav="new-expense">
+          <i class="ti ti-plus" aria-hidden="true"></i>New expense
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= NOTIFICATIONS ================= -->
+    <section class="screen" id="view-notifications">
+      <div class="sub-header">
+        <div class="sub-back" data-nav="back" role="button" tabindex="0" aria-label="Go back">
+          <i class="ti ti-chevron-left" aria-hidden="true"></i>
+        </div>
+        <div class="sub-title">Notifications</div>
+        <div class="sub-action" data-toast="All notifications marked read">Mark read</div>
+      </div>
+      <div class="body">
+        <div class="section-label">Today</div>
+        <div class="list-card">
+          <div class="row" data-nav="inventory" role="button" tabindex="0" aria-label="Open inventory">
+            <div class="row-icon amber"><i class="ti ti-alert-triangle" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Matches (box) low</div>
+              <div class="row-sub">Only 4 left · restock recommended</div>
+            </div>
+            <span class="badge low">Restock</span>
+          </div>
+          <div class="row" data-nav="inventory" role="button" tabindex="0" aria-label="Open inventory">
+            <div class="row-icon amber"><i class="ti ti-alert-triangle" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Soap bar low</div>
+              <div class="row-sub">Only 6 left · restock recommended</div>
+            </div>
+            <span class="badge low">Restock</span>
+          </div>
+          <div class="row" data-nav="add-payment" role="button" tabindex="0" aria-label="Record payment">
+            <div class="row-icon pink"><i class="ti ti-coin" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Credit reminder · Amina U.</div>
+              <div class="row-sub">RWF 2,500 unpaid for 12 days</div>
+            </div>
+            <span class="badge low">Follow up</span>
+          </div>
+          <div class="row">
+            <div class="row-icon blue"><i class="ti ti-clock" aria-hidden="true"></i></div>
+            <div class="row-main">
+              <div class="row-title">Day close at 20:00</div>
+              <div class="row-sub">Count cash and lock the till</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= NAV BAR ================= -->
     <div class="nav-bar">
       <div class="nav-item active">
         <i class="ti ti-home" aria-hidden="true"></i>
@@ -466,6 +1212,181 @@
       </div>
     </div>
   </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      /* ---------- Hash router ----------
+         Every clickable element uses data-nav="<route>".
+         Route "back" pops the navigation stack. */
+      var TAB_FOR = {
+        home: 'home',
+        'new-sale': 'new-sale',
+        inventory: 'inventory',
+        customers: 'customers',
+        expenses: 'expenses',
+        'new-expense': 'expenses',
+        ledger: 'home',
+        'add-payment': 'customers',
+        notifications: 'home'
+      };
+
+      /* Wire up the bottom nav bar from its labels (keeps markup untouched) */
+      var TAB_BY_LABEL = {
+        'Home': 'home',
+        'New sale': 'new-sale',
+        'Inventory': 'inventory',
+        'Customers': 'customers',
+        'Expenses': 'expenses'
+      };
+      Array.prototype.forEach.call(document.querySelectorAll('.nav-item'), function (t) {
+        var label = t.querySelector('span');
+        var routeName = label ? TAB_BY_LABEL[label.textContent.trim()] : null;
+        if (!routeName) return;
+        t.setAttribute('data-tab', routeName);
+        t.setAttribute('data-nav', routeName);
+        t.setAttribute('role', 'button');
+        t.setAttribute('tabindex', '0');
+      });
+
+      var screens = Array.prototype.slice.call(document.querySelectorAll('.screen'));
+      var tabs = Array.prototype.slice.call(document.querySelectorAll('.nav-item'));
+      var current = null;
+      var stack = [];
+
+      function fmt(n) {
+        return n.toLocaleString('en-US');
+      }
+
+      function route() {
+        var r = location.hash.replace('#', '') || 'home';
+        if (!TAB_FOR[r]) r = 'home';
+
+        if (r === stack[stack.length - 1]) {
+          stack.pop(); // went back
+        } else if (current && r !== current) {
+          stack.push(current);
+        }
+        current = r;
+
+        screens.forEach(function (s) {
+          s.classList.toggle('active', s.id === 'view-' + r);
+        });
+        tabs.forEach(function (t) {
+          var on = t.getAttribute('data-tab') === TAB_FOR[r];
+          t.classList.toggle('active', on);
+          if (on) t.setAttribute('aria-current', 'page');
+          else t.removeAttribute('aria-current');
+        });
+        window.scrollTo(0, 0);
+      }
+
+      window.addEventListener('hashchange', route);
+
+      /* ---------- Click delegation ---------- */
+      document.addEventListener('click', function (e) {
+        var chip = e.target.closest('.chip');
+        if (chip) {
+          var group = chip.closest('.chips');
+          if (group) {
+            Array.prototype.forEach.call(group.querySelectorAll('.chip'), function (c) {
+              c.classList.remove('selected');
+            });
+            chip.classList.add('selected');
+            if (group.id === 'sale-pay') toggleCreditField();
+          }
+          return;
+        }
+
+        var toastEl = e.target.closest('[data-toast]');
+        if (toastEl) {
+          showToast(toastEl.getAttribute('data-toast'));
+          return;
+        }
+
+        var el = e.target.closest('[data-nav]');
+        if (!el) return;
+        var target = el.getAttribute('data-nav');
+        if (target === 'back') {
+          location.hash = stack[stack.length - 1] || 'home';
+        } else if (target !== current) {
+          location.hash = target;
+        }
+      });
+
+      /* Keyboard support for focusable buttons */
+      document.addEventListener('keydown', function (e) {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-nav]')) {
+          e.preventDefault();
+          e.target.click();
+        }
+      });
+
+      /* ---------- New sale: live total ---------- */
+      var saleItem = document.getElementById('sale-item');
+      var saleQty = document.getElementById('sale-qty');
+      var saleTotal = document.getElementById('sale-total');
+
+      function updateSaleTotal() {
+        var opt = saleItem.options[saleItem.selectedIndex];
+        var price = opt ? parseFloat(opt.getAttribute('data-price')) || 0 : 0;
+        var qty = parseFloat(saleQty.value) || 0;
+        saleTotal.textContent = 'RWF ' + fmt(Math.round(price * qty));
+      }
+      saleItem.addEventListener('change', updateSaleTotal);
+      saleQty.addEventListener('input', updateSaleTotal);
+      updateSaleTotal();
+
+      function toggleCreditField() {
+        var field = document.getElementById('sale-customer-field');
+        var sel = document.querySelector('#sale-pay .chip.selected');
+        field.style.display = sel && sel.textContent.trim() === 'Credit' ? '' : 'none';
+      }
+
+      /* ---------- Add payment: remaining balance ---------- */
+      var payCustomer = document.getElementById('pay-customer');
+      var payAmount = document.getElementById('pay-amount');
+      var payRemaining = document.getElementById('pay-remaining');
+
+      function updateRemaining() {
+        var opt = payCustomer.options[payCustomer.selectedIndex];
+        var bal = opt ? parseFloat(opt.getAttribute('data-balance')) || 0 : 0;
+        var amt = parseFloat(payAmount.value) || 0;
+        payRemaining.textContent = 'RWF ' + fmt(Math.max(Math.round(bal - amt), 0));
+      }
+      payCustomer.addEventListener('change', updateRemaining);
+      payAmount.addEventListener('input', updateRemaining);
+      updateRemaining();
+
+      /* ---------- Toast + save buttons ---------- */
+      var toast = document.getElementById('toast');
+      var toastTimer = null;
+
+      function showToast(msg) {
+        toast.textContent = msg;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () {
+          toast.classList.remove('show');
+        }, 1800);
+      }
+
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.js-save');
+        if (!btn) return;
+        showToast(btn.getAttribute('data-msg') || 'Saved ✓');
+        setTimeout(function () {
+          location.hash = btn.getAttribute('data-after') || 'home';
+        }, 700);
+      });
+
+      /* ---------- Boot ---------- */
+      route();
+    })();
+  </script>
 
 </body>
 
