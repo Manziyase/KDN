@@ -34,7 +34,7 @@ BT.pages.addPayment = {
             </div>
 
             <div class="field span-2">
-              <label for="f-amount">Amount (RWF)</label>
+              <label for="f-amount">Amount (${ui.currency()})</label>
               <input id="f-amount" type="number" min="0" placeholder="0" inputmode="numeric">
             </div>
 
@@ -47,7 +47,7 @@ BT.pages.addPayment = {
           <div class="summary-box">
             <div>
               <p class="t-label">Remaining balance</p>
-              <p class="t-val" id="f-remaining">RWF 0</p>
+              <p class="t-val" id="f-remaining">${ui.rwf(0)}</p>
             </div>
             <i class="ti ti-coin summary-icon" aria-hidden="true"></i>
           </div>

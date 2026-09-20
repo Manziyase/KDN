@@ -15,10 +15,18 @@ BT.router = (function () {
 
   var routes = {};
   var container = null;
+  var started = false;
   var DEFAULT_ROUTE = 'home'; /* landing page comes first */
+
+  /* Routes that render without the app shell (full-screen pages) */
+  var SHELL_LESS = ['home', 'signin', 'signup'];
 
   function register(name, page) {
     routes[name] = page;
+  }
+
+  function setDefaultRoute(name) {
+    if (routes[name]) DEFAULT_ROUTE = name;
   }
 
   function parse() {
@@ -56,10 +64,17 @@ BT.router = (function () {
   function render() {
     if (!container) container = document.getElementById('page');
     var r = parse();
+
+    /* Auth gate (app.js decides who sees what) */
+    if (BT.app && BT.app.gate) {
+      r = BT.app.gate(r);
+      if (!r) return; /* redirecting — the new hash re-triggers render */
+    }
+
     var page = routes[r.name];
 
-    /* Landing route renders without the app shell */
-    document.body.classList.toggle('landing', r.name === 'home');
+    /* Landing & auth screens render without the app shell */
+    document.body.classList.toggle('landing', SHELL_LESS.indexOf(r.name) !== -1);
 
     container.innerHTML = '';
     page.render(container, r.query);
@@ -83,7 +98,10 @@ BT.router = (function () {
   }
 
   function start() {
-    window.addEventListener('hashchange', render);
+    if (!started) {
+      window.addEventListener('hashchange', render);
+      started = true;
+    }
     render();
   }
 
@@ -104,6 +122,7 @@ BT.router = (function () {
 
   return {
     register: register,
+    setDefaultRoute: setDefaultRoute,
     start: start,
     navigate: navigate,
     render: render

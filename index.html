@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/pages.css">
+  <link rel="stylesheet" href="css/extras.css">
 </head>
 
 <body>
@@ -51,6 +52,9 @@
         <a href="#/inventory">
           <i class="ti ti-box" aria-hidden="true"></i><span>Inventory</span>
         </a>
+        <a href="#/boxes">
+          <i class="ti ti-wallet" aria-hidden="true"></i><span>Money boxes</span>
+        </a>
         <a href="#/customers">
           <i class="ti ti-users" aria-hidden="true"></i><span>Customers</span>
         </a>
@@ -66,14 +70,26 @@
           <i class="ti ti-bell" aria-hidden="true"></i><span>Notifications</span>
           <span class="nav-count" id="nav-count" hidden>0</span>
         </a>
+        <a href="#/settings">
+          <i class="ti ti-settings" aria-hidden="true"></i><span>Settings</span>
+        </a>
+        <a href="#/profile">
+          <i class="ti ti-user-cog" aria-hidden="true"></i><span>My profile</span>
+        </a>
+        <button class="nav-signout" id="signout-btn" type="button">
+          <i class="ti ti-logout" aria-hidden="true"></i><span>Sign out</span>
+        </button>
       </nav>
 
       <div class="sidebar-footer">
-        <span class="avatar">JD</span>
+        <span class="avatar">BT</span>
         <div class="sidebar-user">
-          <strong>Jean's Duka</strong>
-          <small>Remera, Kigali</small>
+          <strong id="user-name">BizTrack Lite</strong>
+          <small id="user-email">Offline demo mode</small>
         </div>
+        <a class="icon-btn" href="#/settings" aria-label="Settings" title="Settings">
+          <i class="ti ti-settings" aria-hidden="true"></i>
+        </a>
       </div>
     </aside>
 
@@ -93,7 +109,10 @@
             <i class="ti ti-bell" aria-hidden="true"></i>
             <span class="dot" id="bell-dot" hidden></span>
           </a>
-          <span class="avatar avatar-sm">JD</span>
+          <a class="icon-btn" href="#/settings" aria-label="Settings" title="Settings">
+            <i class="ti ti-settings" aria-hidden="true"></i>
+          </a>
+          <a class="avatar avatar-sm" href="#/profile" aria-label="My profile" title="My profile">BT</a>
         </div>
       </header>
 
@@ -109,6 +128,8 @@
 
   <!-- App scripts — plain scripts (no build step), load order matters -->
   <script src="js/api.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/data.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/router.js"></script>
@@ -122,6 +143,10 @@
   <script src="js/pages/add-payment.js"></script>
   <script src="js/pages/expenses.js"></script>
   <script src="js/pages/notifications.js"></script>
+  <script src="js/pages/signin.js"></script>
+  <script src="js/pages/settings.js"></script>
+  <script src="js/pages/profile.js"></script>
+  <script src="js/pages/boxes.js"></script>
   <script src="js/app.js"></script>
 </body>
 

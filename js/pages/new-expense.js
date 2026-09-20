@@ -11,6 +11,7 @@ BT.pages.newExpense = {
   render: function (el) {
     var ui = BT.ui;
     var st = BT.store;
+    var t = BT.i18n ? BT.i18n.t : function (k) { return k; };
 
     var categories = ['Transport', 'Stock', 'Airtime', 'Staff', 'Rent', 'Other'];
 
@@ -28,13 +29,22 @@ BT.pages.newExpense = {
             </div>
 
             <div class="field span-2">
-              <label for="f-amount">Amount (RWF)</label>
+              <label for="f-amount">Amount (${ui.currency()})</label>
               <input id="f-amount" type="number" min="0" placeholder="0" inputmode="numeric">
             </div>
 
             <div class="field span-2">
               <label for="f-note">Note</label>
               <input id="f-note" type="text" maxlength="60" placeholder="e.g. Taxi to market">
+            </div>
+
+            <div class="field span-2">
+              <label>${t('payment_method')}</label>
+              <div class="chips" id="f-method">
+                ${['Cash', 'MoMo', 'Bank'].map(function (m, i) {
+                  return `<button type="button" class="chip${i === 0 ? ' selected' : ''}">${m}</button>`;
+                }).join('')}
+              </div>
             </div>
           </div>
 
@@ -49,22 +59,26 @@ BT.pages.newExpense = {
     }
 
     BT.ui.bindChips(el.querySelector('#f-category'));
+    BT.ui.bindChips(el.querySelector('#f-method'));
 
     el.querySelector('#expense-form').addEventListener('submit', function (e) {
       e.preventDefault();
-      var amount = parseFloat(el.querySelector('#f-amount').value);
+      var amount = ui.parseNum(el.querySelector('#f-amount').value);
 
       if (!amount || amount <= 0) {
         ui.toast('Enter a valid amount');
         return;
       }
 
+      var method = el.querySelector('#f-method .chip.selected').textContent.trim();
+
       st.recordExpense({
         category: category(),
         amount: amount,
-        note: el.querySelector('#f-note').value.trim()
+        note: el.querySelector('#f-note').value.trim(),
+        method: method
       });
-      ui.toast('Expense saved — ' + ui.rwf(amount));
+      ui.toast('Expense saved — ' + ui.fmtMoney(amount) + ' from ' + method);
       BT.router.navigate('expenses');
     });
   }

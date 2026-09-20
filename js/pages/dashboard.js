@@ -15,6 +15,9 @@ BT.pages.dashboard = {
 
     var low = st.lowStock();
     var netProfit = s.revenuePeriod - s.expensesPeriod;
+    var b = st.boxes();
+    var total = b.cash + b.bank + b.momo;
+    var t = BT.i18n ? BT.i18n.t : function (k) { return k; };
 
     function kpi(icon, tint, val, label) {
       return `
@@ -91,10 +94,10 @@ BT.pages.dashboard = {
       <div class="dash-grid">
         <div class="dash-col">
           <div class="kpi-grid">
-            ${kpi('ti-trending-up', 'green', ui.rwf(s.revenuePeriod), 'Total revenue · this month')}
-            ${kpi('ti-trending-down', 'red', ui.rwf(s.expensesPeriod), 'Total expenses · this month')}
-            ${kpi('ti-cash', 'blue', ui.rwf(netProfit), 'Net profit · this month')}
-            ${kpi('ti-users', 'amber', ui.rwf(st.creditOwed()), 'Credit owed by customers')}
+            ${kpi('ti-trending-up', 'green', ui.fmtMoney(s.revenuePeriod), 'Total revenue · this month')}
+            ${kpi('ti-trending-down', 'red', ui.fmtMoney(s.expensesPeriod), 'Total expenses · this month')}
+            ${kpi('ti-cash', 'blue', ui.fmtMoney(netProfit), 'Net profit · this month')}
+            ${kpi('ti-users', 'amber', ui.fmtMoney(st.creditOwed()), 'Credit owed by customers')}
           </div>
 
           <div class="card">
@@ -109,6 +112,21 @@ BT.pages.dashboard = {
         </div>
 
         <div class="dash-col">
+
+          <div class="card">
+            <div class="card-head">
+              <h2>${t('where_money')}</h2>
+              <a class="btn btn-sm" href="#/boxes">${t('view_boxes')}</a>
+            </div>
+            <div class="card-body boxes-mini">
+              <div class="box-mini"><span class="dot-green"></span>Cash<b>${ui.fmtMoney(b.cash)}</b></div>
+              <div class="box-mini"><span class="dot-blue"></span>Bank<b>${ui.fmtMoney(b.bank)}</b></div>
+              <div class="box-mini"><span class="dot-purple"></span>MoMo<b>${ui.fmtMoney(b.momo)}</b></div>
+              <div class="box-mini"><span class="dot-amber"></span>Credit<b>${ui.fmtMoney(b.credit)}</b></div>
+              <div class="box-mini total"><span class="dot-slate"></span>Total<b>${ui.fmtMoney(total)}</b></div>
+            </div>
+          </div>
+
           <div class="balance-card">
             <p class="balance-label">Closing balance</p>
             <p class="balance-amount">${ui.rwf(st.closing())}</p>

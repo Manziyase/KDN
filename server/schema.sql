@@ -5,19 +5,58 @@
 --   • phpMyAdmin  → Import → this file
 --   • npm run seed  (uses the Node connection in server/config.js)
 --   • C:\xampp\mysql\bin\mysql.exe -u root < server\schema.sql
+--
+-- Safe to re-run: CREATE TABLE IF NOT EXISTS + ALTER ... IF NOT
+-- EXISTS (MariaDB 10.4+) + INSERT IGNORE for the demo account.
 -- ============================================================
 
 CREATE DATABASE IF NOT EXISTS biztrack
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE biztrack;
 
--- ---------- Tables ----------
+-- ---------- Users & sessions (authentication) ----------
+
+CREATE TABLE IF NOT EXISTS users (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(80)  NOT NULL,
+  email         VARCHAR(120) NOT NULL UNIQUE,
+  password_hash VARCHAR(200) NOT NULL,
+  role          ENUM('owner','staff') NOT NULL DEFAULT 'owner',
+  phone         VARCHAR(30)  NULL,
+  shop_name     VARCHAR(80)  NULL,
+  currency      VARCHAR(8)   NOT NULL DEFAULT 'RWF',
+  language      VARCHAR(5)   NOT NULL DEFAULT 'en',
+  theme         ENUM('light','dark') NOT NULL DEFAULT 'light',
+  accent        VARCHAR(10)  NOT NULL DEFAULT 'navy',
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token      CHAR(64) PRIMARY KEY,
+  user_id    INT       NOT NULL,
+  created_at DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME  NOT NULL,
+  CONSTRAINT fk_session_user FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ---------- Core tables ----------
 
 CREATE TABLE IF NOT EXISTS settings (
   id            TINYINT UNSIGNED PRIMARY KEY,
   opening_float INT  NOT NULL DEFAULT 53400,
-  sale_counter  INT  NOT NULL DEFAULT 145
+  sale_counter  INT  NOT NULL DEFAULT 145,
+  /* money boxes — where the money physically sits.
+     (the credit box = SUM(customers.balance), computed live) */
+  cash_box      INT  NOT NULL DEFAULT 53400,
+  bank_box      INT  NOT NULL DEFAULT 120000,
+  momo_box      INT  NOT NULL DEFAULT 26000
 );
+
+ALTER TABLE settings
+  ADD COLUMN IF NOT EXISTS cash_box INT NOT NULL DEFAULT 53400,
+  ADD COLUMN IF NOT EXISTS bank_box INT NOT NULL DEFAULT 120000,
+  ADD COLUMN IF NOT EXISTS momo_box INT NOT NULL DEFAULT 26000;
 
 CREATE TABLE IF NOT EXISTS products (
   id            VARCHAR(40)  PRIMARY KEY,
@@ -62,8 +101,12 @@ CREATE TABLE IF NOT EXISTS expenses (
   category   VARCHAR(40) NOT NULL,
   amount     INT         NOT NULL,
   note       VARCHAR(120) NULL,
+  method     ENUM('Cash','MoMo','Bank') NOT NULL DEFAULT 'Cash',
   created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE expenses
+  ADD COLUMN IF NOT EXISTS method ENUM('Cash','MoMo','Bank') NOT NULL DEFAULT 'Cash';
 
 CREATE TABLE IF NOT EXISTS payments (
   id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -96,8 +139,10 @@ DELETE FROM expenses;
 DELETE FROM products;
 DELETE FROM customers;
 DELETE FROM settings;
+-- NOTE: users & sessions are NOT wiped — accounts survive a reseed.
 
-INSERT INTO settings (id, opening_float, sale_counter) VALUES (1, 53400, 145);
+INSERT INTO settings (id, opening_float, sale_counter, cash_box, bank_box, momo_box)
+VALUES (1, 53400, 145, 53400, 120000, 26000);
 
 INSERT INTO products (id, name, price, stock, sold_week, low_threshold, sort_order) VALUES
   ('matches', 'Matches (box)',    500,  4, 32, 10, 1),
@@ -155,16 +200,16 @@ SELECT s.id, 'oil',     1, 3500 FROM sales s WHERE s.number = 144 UNION ALL
 SELECT s.id, 'soap',    2, 700 FROM sales s WHERE s.number = 144;
 
 -- Expenses: 79,400 earlier this month + 7,000 today (4 entries)
-INSERT INTO expenses (category, amount, note, created_at) VALUES
-  ('Rent',      40000, 'Monthly shop rent',  NOW() - INTERVAL 15 DAY),
-  ('Stock',     25000, 'Wholesale restock',  NOW() - INTERVAL 7 DAY),
-  ('Utilities',  6400, 'Electricity bill',   NOW() - INTERVAL 3 DAY),
-  ('Transport',  4000, 'Taxi to market',     NOW() - INTERVAL 3 DAY),
-  ('Airtime',    4000, 'Data bundles',       NOW() - INTERVAL 2 DAY),
-  ('Transport',  2000, 'Taxi to market',     CONCAT(CURDATE(), ' 11:30:00')),
-  ('Staff',      3200, 'Staff lunch',        CONCAT(CURDATE(), ' 12:15:00')),
-  ('Airtime',    1000, 'Airtime card',       CONCAT(CURDATE(), ' 14:00:00')),
-  ('Stock',       800, 'Plastic bags',       CONCAT(CURDATE(), ' 16:40:00'));
+INSERT INTO expenses (category, amount, note, method, created_at) VALUES
+  ('Rent',      40000, 'Monthly shop rent',  'Cash', NOW() - INTERVAL 15 DAY),
+  ('Stock',     25000, 'Wholesale restock',  'Cash', NOW() - INTERVAL 7 DAY),
+  ('Utilities',  6400, 'Electricity bill',   'MoMo', NOW() - INTERVAL 3 DAY),
+  ('Transport',  4000, 'Taxi to market',     'Cash', NOW() - INTERVAL 3 DAY),
+  ('Airtime',    4000, 'Data bundles',       'MoMo', NOW() - INTERVAL 2 DAY),
+  ('Transport',  2000, 'Taxi to market',     'Cash', CONCAT(CURDATE(), ' 11:30:00')),
+  ('Staff',      3200, 'Staff lunch',        'Cash', CONCAT(CURDATE(), ' 12:15:00')),
+  ('Airtime',    1000, 'Airtime card',       'MoMo', CONCAT(CURDATE(), ' 14:00:00')),
+  ('Stock',       800, 'Plastic bags',       'Cash', CONCAT(CURDATE(), ' 16:40:00'));
 
 -- Today's cash ledger (matches the sales/expenses above)
 INSERT INTO ledger_entries (label, type, amount, method, category, created_at) VALUES
@@ -176,3 +221,11 @@ INSERT INTO ledger_entries (label, type, amount, method, category, created_at) V
   ('Sale #144',     'in',   12100, 'MoMo', NULL,     CONCAT(CURDATE(), ' 13:20:00')),
   ('Airtime',       'out',   1000, NULL, 'Airtime',  CONCAT(CURDATE(), ' 14:00:00')),
   ('Plastic bags',  'out',    800, NULL, 'Stock',    CONCAT(CURDATE(), ' 16:40:00'));
+
+-- ---------- Demo account ----------
+-- Password: demo1234  (PBKDF2-SHA512, 150k iterations, salt shown)
+-- INSERT IGNORE keeps the account when the seed re-runs.
+INSERT IGNORE INTO users (name, email, password_hash, role, shop_name) VALUES
+  ('Demo Owner', 'demo@biztrack.app',
+   'b1a2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90:REPLACED_AT_SEED_TIME',
+   'owner', 'KDN Shop');

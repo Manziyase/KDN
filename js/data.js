@@ -20,6 +20,16 @@ window.BT = window.BT || {};
 
   var STORAGE_KEY = 'biztrack-lite-v1';
 
+  /* Active preferences (currency, language, theme, accent).
+     Saved to localStorage; synced to the signed-in user's
+     MySQL profile on the Settings page. */
+  BT.prefs = {
+    currency: 'RWF',
+    language: 'en',
+    theme: 'light',
+    accent: 'navy'
+  };
+
   /* Offline/demo fallback snapshot — mirrors the seed data */
   var DEFAULTS = {
     date: 'Monday, 23 June 2026',
@@ -27,6 +37,9 @@ window.BT = window.BT || {};
     revenuePeriod: 258000,
     expensesPeriod: 86400,
     saleCounter: 145,
+
+    /* Where the money sits. The credit box = customer debt. */
+    boxes: { cash: 53400, bank: 120000, momo: 26000, credit: 4550 },
 
     items: [
       { id: 'matches', name: 'Matches (box)',   price: 500,  stock: 4,  soldWeek: 32, low: 10 },
@@ -103,6 +116,42 @@ window.BT = window.BT || {};
       });
     },
 
+    /* ---------- Preferences (currency / language / theme) ---------- */
+
+    applyPrefs: function (p) {
+      var self = this;
+      Object.keys(BT.prefs).forEach(function (k) {
+        if (p[k] !== undefined) BT.prefs[k] = p[k];
+      });
+      try {
+        localStorage.setItem('biztrack-prefs', JSON.stringify(BT.prefs));
+      } catch (e) { /* ignore */ }
+      if (this.online && BT.api) {
+        return BT.api.post('/prefs', BT.prefs).catch(function (err) {
+          console.warn('[BizTrack] Pref sync failed:', err.message);
+          self.online = false; /* session expired — keep local only */
+        });
+      }
+      return Promise.resolve();
+    },
+
+    /* ---------- Money boxes ---------- */
+
+    boxes: function () {
+      var b = this.state.boxes || { cash: 0, bank: 0, momo: 0 };
+      return {
+        cash: b.cash || 0,
+        bank: b.bank || 0,
+        momo: b.momo || 0,
+        credit: this.creditOwed()
+      };
+    },
+
+    totalMoney: function () {
+      var b = this.boxes();
+      return b.cash + b.bank + b.momo + b.credit;
+    },
+
     save: function () {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
@@ -149,6 +198,10 @@ window.BT = window.BT || {};
       return this.state.items.filter(function (i) {
         return i.stock <= i.low;
       });
+    },
+
+    lowStockCount: function () {
+      return this.lowStock().length;
     },
 
     lastEntries: function (n) {
@@ -225,16 +278,24 @@ window.BT = window.BT || {};
       };
       this.state.ledger.push(entry);
       this.state.expensesPeriod += amount;
+      this.state.expenseCounter++;
+      var b = this.state.boxes;
+      if (b) {
+        var box = exp.method === 'MoMo' ? 'momo' : exp.method === 'Bank' ? 'bank' : 'cash';
+        b[box] = Math.max(0, b[box] - amount);
+      }
       this.save();
 
       if (this.online && BT.api) {
         var self = this;
         BT.api.post('/expenses', {
-          category: exp.category, amount: amount, note: exp.note || ''
+          category: exp.category, amount: amount,
+          note: exp.note || '', method: exp.method || 'Cash'
         }).then(function (r) {
           if (!r || r.ok === false) return;
           self.state.revenuePeriod = r.period.revenue;
           self.state.expensesPeriod = r.period.expenses;
+          if (r.boxes) self.state.boxes = r.boxes;
           var i = self.state.ledger.indexOf(entry);
           if (i !== -1) self.state.ledger[i] = r.ledgerEntry;
           self.save();
@@ -243,6 +304,124 @@ window.BT = window.BT || {};
         });
       }
       return amount;
+    },
+
+    /* Add a brand-new product (optionally buying initial stock,
+      which is booked as a Stock expense from the chosen box). */
+    addProduct: function (prod) {
+      var self = this;
+      var local = {
+        id: String(prod.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'item',
+        name: prod.name,
+        price: Math.round(prod.price),
+        stock: Math.max(0, Math.round(prod.stock || 0)),
+        soldWeek: 0,
+        low: Math.max(1, Math.round(prod.low || 10))
+      };
+      this.state.items.push(local);
+      if (local.stock > 0) {
+        var cost = local.price * local.stock;
+        this.state.expensesPeriod += cost;
+        var b0 = this.state.boxes;
+        if (b0) {
+          var bx = prod.method === 'MoMo' ? 'momo' : prod.method === 'Bank' ? 'bank' : 'cash';
+          b0[bx] = Math.max(0, b0[bx] - cost);
+        }
+        this.state.ledger.push({
+          time: nowTime(), label: 'Stock purchase · ' + local.name,
+          type: 'out', amount: cost, method: prod.method, category: 'Stock'
+        });
+      }
+      this.save();
+
+      if (this.online && BT.api) {
+        return BT.api.post('/products', {
+          name: prod.name, price: local.price, stock: local.stock,
+          low: local.low, method: prod.method || null
+        }).then(function (r) {
+          if (r && r.ok !== false && r.period) {
+            self.state.revenuePeriod = r.period.revenue;
+            self.state.expensesPeriod = r.period.expenses;
+            self.save();
+          }
+          return true;
+        }).catch(function (err) {
+          ui_alert(err.message);
+          return false;
+        });
+      }
+      return Promise.resolve(true);
+    },
+
+    /* Buy more stock for an existing product. */
+    restock: function (itemId, qty, method) {
+      var self = this;
+      var item = this.state.items.find(function (i) { return i.id === itemId; });
+      if (!item) return Promise.resolve(false);
+
+      var cost = item.price * Math.max(1, Math.round(qty));
+      item.stock += Math.max(1, Math.round(qty));
+      this.state.expensesPeriod += cost;
+      var b = this.state.boxes;
+      if (b) {
+        var box = method === 'MoMo' ? 'momo' : method === 'Bank' ? 'bank' : 'cash';
+        b[box] = Math.max(0, b[box] - cost);
+      }
+      this.state.ledger.push({
+        time: nowTime(), label: 'Restock · ' + item.name,
+        type: 'out', amount: cost, method: method, category: 'Stock'
+      });
+      this.save();
+
+      if (this.online && BT.api) {
+        return BT.api.post('/products/' + encodeURIComponent(itemId) + '/restock', {
+          qty: Math.round(qty), method: method
+        }).then(function (r) {
+          if (r && r.ok !== false) {
+            if (r.period) {
+              self.state.revenuePeriod = r.period.revenue;
+              self.state.expensesPeriod = r.period.expenses;
+            }
+            item.stock = Math.max(item.stock, r.stock);
+            if (r.boxes) self.state.boxes = r.boxes;
+            self.save();
+          }
+          return true;
+        }).catch(function (err) {
+          ui_alert(err.message);
+          return false;
+        });
+      }
+      return Promise.resolve(true);
+    },
+
+    /* Move money between the physical boxes (cash/bank/momo). */
+    transferBoxes: function (from, to, amount) {
+      var self = this;
+      var amt = Math.max(0, Math.round(amount));
+      var b = this.state.boxes;
+      if (!b || !amt || from === to || (b[from] || 0) < amt) return false;
+      b[from] -= amt;
+      b[to] = (b[to] || 0) + amt;
+      this.state.ledger.push({
+        time: nowTime(),
+        label: 'Transfer ' + from + ' → ' + to,
+        type: 'info', amount: amt, method: to, category: 'Transfer'
+      });
+      this.save();
+
+      if (this.online && BT.api) {
+        BT.api.post('/boxes/transfer', { from: from + '_box', to: to + '_box', amount: amt })
+          .then(function (r) {
+            if (r && r.boxes) {
+              self.state.boxes = r.boxes;
+              self.save();
+            }
+          }).catch(function (err) {
+            console.warn('[BizTrack] Transfer sync failed:', err.message);
+          });
+      }
+      return true;
     },
 
     recordPayment: function (pay) {
@@ -263,6 +442,11 @@ window.BT = window.BT || {};
         method: pay.method
       };
       this.state.ledger.push(entry);
+      var b = this.state.boxes;
+      if (b) {
+        var box = pay.method === 'MoMo' ? 'momo' : pay.method === 'Bank' ? 'bank' : 'cash';
+        b[box] = (b[box] || 0) + amount;
+      }
       this.save();
 
       if (this.online && BT.api) {
@@ -273,6 +457,7 @@ window.BT = window.BT || {};
           if (!r || r.ok === false) return;
           cust.balance = r.customer.balance;
           cust.lastPayment = r.customer.lastPayment;
+          if (r.boxes) self.state.boxes = r.boxes;
           var i = self.state.ledger.indexOf(entry);
           if (i !== -1) self.state.ledger[i] = r.ledgerEntry;
           self.save();

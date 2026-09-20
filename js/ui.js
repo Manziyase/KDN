@@ -1,5 +1,10 @@
 /* ============================================================
    BizTrack Lite — UI helpers: formatting, toast, chip groups
+
+   All money display goes through money()/fmtMoney(), which uses
+   the currency chosen on the Settings page (BT.prefs.currency,
+   default RWF). ui.rwf() is kept as an alias so existing pages
+   keep working.
    ============================================================ */
 
 window.BT = window.BT || {};
@@ -9,9 +14,15 @@ BT.ui = (function () {
 
   /* Escape untrusted text before inserting into HTML */
   function esc(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    return String(s).replace(/[&<>\"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[c];
     });
+  }
+
+  /* ---------- Currency ---------- */
+
+  function currency() {
+    return (BT.prefs && BT.prefs.currency) || 'RWF';
   }
 
   /* 1234567 -> "1,234,567" */
@@ -19,12 +30,24 @@ BT.ui = (function () {
     return Math.round(n || 0).toLocaleString('en-US');
   }
 
-  /* 1234567 -> "RWF 1,234,567" */
+  /* "1,234,567 RWF" */
+  function fmtMoney(n) {
+    return fmt(n) + ' ' + currency();
+  }
+
+  /* "RWF 1,234,567" — legacy alias, kept for existing pages */
   function rwf(n) {
-    return 'RWF ' + fmt(n);
+    return currency() + ' ' + fmt(n);
+  }
+
+  /* Parse user input that may contain commas/spaces: "12,500" -> 12500 */
+  function parseNum(value) {
+    var n = parseFloat(String(value).replace(/[,\s]/g, ''));
+    return isNaN(n) ? 0 : n;
   }
 
   /* ---------- Toast ---------- */
+
   var toastTimer = null;
 
   function toast(msg) {
@@ -57,7 +80,10 @@ BT.ui = (function () {
   return {
     esc: esc,
     fmt: fmt,
+    fmtMoney: fmtMoney,
     rwf: rwf,
+    currency: currency,
+    parseNum: parseNum,
     toast: toast,
     bindChips: bindChips
   };

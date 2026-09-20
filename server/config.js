@@ -18,6 +18,10 @@ module.exports = {
     database: process.env.DB_NAME || 'biztrack'
   },
 
+  /* Session signing/peppering secret (regenerate for production!) */
+  sessionSecret: process.env.SESSION_SECRET ||
+    'c5fb32da622b38dfce1b4431d301e39718765b95d3bb3aafb2b3319b2f48608d',
+
   /* Web server */
   port: Number(process.env.PORT || 3000)
 };
