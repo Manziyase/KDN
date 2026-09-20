@@ -317,17 +317,29 @@ app.post('/api/boxes/transfer', function (req, res) {
             [amount, amount]);
         })
         .then(function () {
+          /* the books must show the move, or the next boot's
+             recompute would undo it: money leaves one box ('out')
+             and lands in the other ('in') */
           return exec('INSERT INTO ledger_entries (label, type, amount, method, category) VALUES (?, ?, ?, ?, ?)',
-            ['Transfer ' + FROM + ' → ' + TO, 'info', amount, TO, 'Transfer']);
+            [label, 'out', amount, FROM, 'Transfer']);
+        })
+        .then(function () {
+          return exec('INSERT INTO ledger_entries (label, type, amount, method, category) VALUES (?, ?, ?, ?, ?)',
+            [label, 'in', amount, TO, 'Transfer']);
         })
         .then(function () {
           return exec('SELECT cash_box, bank_box, momo_box FROM settings WHERE id = 1');
         })
         .then(function (r) {
-          return {
-            boxes: { cash: r[0][0].cash_box, bank: r[0][0].bank_box, momo: r[0][0].momo_box },
-            ledgerEntry: ledgerRow(new Date(), 'Transfer ' + FROM + ' → ' + TO, 'info', amount, TO, 'Transfer')
-          };
+          return exec('SELECT COALESCE(SUM(balance),0) AS v FROM customers').then(function (cc) {
+            return {
+              boxes: {
+                cash: r[0][0].cash_box, bank: r[0][0].bank_box,
+                momo: r[0][0].momo_box, credit: cc[0][0].v
+              },
+              ledgerEntry: ledgerRow(new Date(), label, 'out', amount, FROM, 'Transfer')
+            };
+          });
         });
     });
   }).catch(function (err) { fail(res, 400, err.message); });
@@ -344,6 +356,50 @@ const round = Math.round;
 /* Same shape as a transaction exec(): resolves [rows, fields] */
 function q(sql, params) {
   return db.query(sql, params).then(function (rows) { return [rows, null]; });
+}
+
+/* Profit booked since the first ledger entry (net of opening float).
+   Credit sales count as revenue earned — the money is owed, not gone. */
+function netProfitToDate(exec) {
+  return exec("SELECT " +
+    "COALESCE(SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END),0) + " +
+    "COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END),0) - " +
+    "COALESCE(SUM(CASE WHEN type = 'out' THEN amount ELSE 0 END),0) AS v " +
+    "FROM ledger_entries")
+    .then(function (r) { return Number(r[0][0].v); });
+}
+
+/* The boxes are a view of the books: opening float + every 'in'
+   entry − every 'out' entry, split by payment method (Cash → cash
+   box, MoMo → momo box, Bank → bank box). Credit sales are not real
+   money yet, so they don't touch the boxes — the credit box is
+   SUM(customers.balance), computed live.
+
+   Recomputing on every boot heals any drift from older versions
+   that did not post MoMo sales into the boxes. */
+function recomputeBoxes(exec) {
+  return Promise.all([
+    exec('SELECT opening_float FROM settings WHERE id = 1'),
+    exec("SELECT COALESCE(SUM(CASE WHEN method = 'MoMo' THEN amount ELSE 0 END),0) AS momo, " +
+         "COALESCE(SUM(CASE WHEN method = 'Bank' THEN amount ELSE 0 END),0) AS bank, " +
+         "COALESCE(SUM(CASE WHEN method = 'Cash' OR method IS NULL THEN amount ELSE 0 END),0) AS cash " +
+         "FROM ledger_entries WHERE type = 'in'"),
+    exec("SELECT COALESCE(SUM(CASE WHEN method = 'MoMo' THEN amount ELSE 0 END),0) AS momo, " +
+         "COALESCE(SUM(CASE WHEN method = 'Bank' THEN amount ELSE 0 END),0) AS bank, " +
+         "COALESCE(SUM(CASE WHEN method = 'Cash' OR method IS NULL THEN amount ELSE 0 END),0) AS cash " +
+         "FROM ledger_entries WHERE type = 'out'")
+  ]).then(function (r) {
+    const opening = r[0][0][0].opening_float || 0;
+    const ins = r[1][0][0], outs = r[2][0][0];
+    const boxes = {
+      cash: opening + Number(ins.cash) - Number(outs.cash),
+      momo: Number(ins.momo) - Number(outs.momo),
+      bank: Number(ins.bank) - Number(outs.bank)
+    };
+    return exec('UPDATE settings SET cash_box = ?, bank_box = ?, momo_box = ? WHERE id = 1',
+      [round(Math.max(0, boxes.cash)), round(Math.max(0, boxes.bank)), round(Math.max(0, boxes.momo))])
+      .then(function () { return boxes; });
+  });
 }
 
 function periodSums(exec) {
@@ -383,9 +439,10 @@ app.get('/api/bootstrap', function (req, res) {
       "SELECT label, type, amount, method, category, created_at FROM ledger_entries " +
       "WHERE type <> 'info' AND DATE(created_at) = CURDATE() ORDER BY created_at"
     ),
-    db.query('SELECT cash_box, bank_box, momo_box FROM settings WHERE id = 1'),
     db.query('SELECT COALESCE(SUM(balance),0) AS v FROM customers'),
-    periodSums(q)
+    periodSums(q),
+    recomputeBoxes(q),
+    netProfitToDate(q)
   ]).then(function (r) {
     const settings = r[0][0];
     if (!settings) throw new Error('Settings row missing — run: npm run seed');
@@ -411,16 +468,15 @@ app.get('/api/bootstrap', function (req, res) {
       return ledgerRow(e.created_at, e.label, e.type, e.amount, e.method, e.category);
     }));
 
-    const boxes = r[4][0];
-
     res.json({
       server: true,
       date: db.longDate(new Date()),
       openingFloat: settings.opening_float,
-      revenuePeriod: r[6].revenue,
-      expensesPeriod: r[6].expenses,
+      revenuePeriod: r[5].revenue,
+      expensesPeriod: r[5].expenses,
       saleCounter: settings.sale_counter,
-      boxes: { cash: boxes.cash_box, bank: boxes.bank_box, momo: boxes.momo_box, credit: r[5][0].v },
+      boxes: { cash: r[6].cash, bank: r[6].bank, momo: r[6].momo, credit: r[4][0].v },
+      profitToDate: r[7],
       items: items,
       customers: customers,
       ledger: ledger
@@ -484,9 +540,13 @@ app.post('/api/sales', function (req, res) {
                         );
                       })
                       .then(function () {
-                        /* cash sales land in the cash box */
-                        if (method === 'Cash') {
-                          return exec('UPDATE settings SET cash_box = cash_box + ? WHERE id = 1', [total]);
+                        /* the sale lands in the box matching its method:
+                           Cash → cash box, MoMo → momo box.
+                           (Credit sales are not real money yet — they
+                           go to the credit box, = customers.balance) */
+                        if (method !== 'Credit') {
+                          const col = (method === 'MoMo') ? 'momo_box' : 'cash_box';
+                          return exec('UPDATE settings SET ' + col + ' = ' + col + ' + ? WHERE id = 1', [total]);
                         }
                         return null;
                       })
@@ -511,8 +571,14 @@ app.post('/api/sales', function (req, res) {
           result.period = period;
           return exec('SELECT cash_box, bank_box, momo_box FROM settings WHERE id = 1')
             .then(function (b) {
-              result.boxes = { cash: b[0][0].cash_box, bank: b[0][0].bank_box, momo: b[0][0].momo_box };
-              return result;
+              return exec('SELECT COALESCE(SUM(balance),0) AS v FROM customers')
+                .then(function (cc) {
+                  result.boxes = {
+                    cash: b[0][0].cash_box, bank: b[0][0].bank_box,
+                    momo: b[0][0].momo_box, credit: cc[0][0].v
+                  };
+                  return result;
+                });
             });
         });
       });
@@ -529,6 +595,7 @@ app.post('/api/expenses', function (req, res) {
   const amount = round(Number(body.amount));
   const category = String(body.category || 'Other').slice(0, 40);
   const note = String(body.note || '').slice(0, 120);
+  const method = ['MoMo', 'Bank'].indexOf(body.method) !== -1 ? body.method : 'Cash';
 
   if (!amount || amount <= 0) return fail(res, 400, 'A valid amount is required');
 
@@ -546,12 +613,17 @@ app.post('/api/expenses', function (req, res) {
       .then(function () { return periodSums(exec); })
       .then(function (period) {
         return exec('SELECT cash_box, bank_box, momo_box FROM settings WHERE id = 1').then(function (b) {
-          return {
-            amount: amount,
-            boxes: { cash: b[0][0].cash_box, bank: b[0][0].bank_box, momo: b[0][0].momo_box },
-            ledgerEntry: ledgerRow(new Date(), note || category, 'out', amount, method, category),
-            period: period
-          };
+          return exec('SELECT COALESCE(SUM(balance),0) AS v FROM customers').then(function (cc) {
+            return {
+              amount: amount,
+              boxes: {
+                cash: b[0][0].cash_box, bank: b[0][0].bank_box,
+                momo: b[0][0].momo_box, credit: cc[0][0].v
+              },
+              ledgerEntry: ledgerRow(new Date(), note || category, 'out', amount, method, category),
+              period: period
+            };
+          });
         });
       });
   }).then(function (result) {
@@ -599,16 +671,21 @@ app.post('/api/payments', function (req, res) {
           })
           .then(function (lp) {
             return exec('SELECT cash_box, bank_box, momo_box FROM settings WHERE id = 1').then(function (b) {
-              return {
-                amount: amount,
-                customer: {
-                  id: customerId,
-                  balance: newBalance,
-                  lastPayment: db.shortDate(lp[0][0].last_payment)
-                },
-                boxes: { cash: b[0][0].cash_box, bank: b[0][0].bank_box, momo: b[0][0].momo_box },
-                ledgerEntry: ledgerRow(new Date(), 'Payment · ' + cust.name, 'in', amount, method)
-              };
+              return exec('SELECT COALESCE(SUM(balance),0) AS v FROM customers').then(function (cc) {
+                return {
+                  amount: amount,
+                  customer: {
+                    id: customerId,
+                    balance: newBalance,
+                    lastPayment: db.shortDate(lp[0][0].last_payment)
+                  },
+                  boxes: {
+                    cash: b[0][0].cash_box, bank: b[0][0].bank_box,
+                    momo: b[0][0].momo_box, credit: cc[0][0].v
+                  },
+                  ledgerEntry: ledgerRow(new Date(), 'Payment · ' + cust.name, 'in', amount, method)
+                };
+              });
             });
           });
       });
