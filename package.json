@@ -1,0 +1,18 @@
+{
+  "name": "biztrack-lite",
+  "version": "1.0.0",
+  "description": "BizTrack Lite — shop management web app (vanilla JS frontend, Node.js + MySQL backend)",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js",
+    "seed": "node server/seed.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mysql2": "^3.11.0"
+  }
+}
