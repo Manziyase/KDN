@@ -390,7 +390,7 @@ window.BT = window.BT || {};
           }
           return true;
         }).catch(function (err) {
-          ui_alert(err.message);
+          BT.ui.toast(err.message);
           return false;
         });
       }
@@ -429,7 +429,7 @@ window.BT = window.BT || {};
           }
           return true;
         }).catch(function (err) {
-          ui_alert(err.message);
+          BT.ui.toast(err.message);
           return false;
         });
       }
@@ -505,6 +505,191 @@ window.BT = window.BT || {};
         });
       }
       return amount;
+    },
+
+    /* ============================================================
+       CRUD — products / customers / expenses
+       Online, every method calls the API and adopts the server's
+       authoritative answer; offline they act on the demo snapshot
+       (expense editing needs the server's books, so it is blocked).
+       ============================================================ */
+
+    /* ---------- Products: update / delete ---------- */
+
+    updateProduct: function (id, changes) {
+      var self = this;
+      if (this.online && BT.api) {
+        return BT.api.put('/products/' + encodeURIComponent(id), changes).then(function (r) {
+          if (!r || r.ok === false) return false;
+          var item = self.state.items.find(function (i) { return i.id === id; });
+          if (item && r.item) Object.assign(item, r.item);
+          self.save();
+          return true;
+        });
+      }
+      var item = this.state.items.find(function (i) { return i.id === id; });
+      if (!item) return Promise.reject(new Error('Unknown item'));
+      item.name = changes.name || item.name;
+      item.price = Math.round(Number(changes.price) || item.price);
+      item.low = Math.max(1, Math.round(Number(changes.low) || item.low));
+      this.save();
+      return Promise.resolve(true);
+    },
+
+    deleteProduct: function (id) {
+      var self = this;
+      if (this.online && BT.api) {
+        return BT.api.del('/products/' + encodeURIComponent(id)).then(function (r) {
+          if (!r || r.ok === false) return false;
+          self.state.items = self.state.items.filter(function (i) { return i.id !== id; });
+          self.save();
+          return true;
+        });
+      }
+      /* offline: past sales keep their totals in the ledger, so
+         removing the item itself is always safe locally */
+      this.state.items = this.state.items.filter(function (i) { return i.id !== id; });
+      this.save();
+      return Promise.resolve(true);
+    },
+
+    /* ---------- Customers: add / rename / remove ---------- */
+
+    addCustomer: function (name) {
+      var self = this;
+      if (this.online && BT.api) {
+        return BT.api.post('/customers', { name: name }).then(function (r) {
+          if (!r || r.ok === false) return false;
+          if (!self.state.customers.some(function (c) { return c.id === r.customer.id; })) {
+            self.state.customers.push(r.customer);
+            self.state.customers.sort(function (a, b) { return a.name.localeCompare(b.name); });
+          }
+          self.save();
+          return true;
+        });
+      }
+      var id = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'customer';
+      if (this.state.customers.some(function (c) { return c.id === id; })) {
+        return Promise.reject(new Error('A customer with this name already exists'));
+      }
+      this.state.customers.push({ id: id, name: name, balance: 0, lastPayment: '—' });
+      this.save();
+      return Promise.resolve(true);
+    },
+
+    updateCustomer: function (id, name) {
+      var self = this;
+      if (this.online && BT.api) {
+        return BT.api.put('/customers/' + encodeURIComponent(id), { name: name }).then(function (r) {
+          if (!r || r.ok === false) return false;
+          var cust = self.state.customers.find(function (c) { return c.id === id; });
+          if (cust && r.customer) cust.name = r.customer.name;
+          self.save();
+          return true;
+        });
+      }
+      var cust = this.state.customers.find(function (c) { return c.id === id; });
+      if (!cust) return Promise.reject(new Error('Unknown customer'));
+      cust.name = name;
+      this.save();
+      return Promise.resolve(true);
+    },
+
+    deleteCustomer: function (id) {
+      var self = this;
+      if (this.online && BT.api) {
+        return BT.api.del('/customers/' + encodeURIComponent(id)).then(function (r) {
+          if (!r || r.ok === false) return false;
+          self.state.customers = self.state.customers.filter(function (c) { return c.id !== id; });
+          self.save();
+          return true;
+        });
+      }
+      var cust = this.state.customers.find(function (c) { return c.id === id; });
+      if (cust && cust.balance > 0) {
+        return Promise.reject(new Error(cust.name + ' still owes ' + cust.balance + ' — record a payment first'));
+      }
+      this.state.customers = this.state.customers.filter(function (c) { return c.id !== id; });
+      this.save();
+      return Promise.resolve(true);
+    },
+
+    /* ---------- Expenses: full history (the Expenses page shows
+       today's ledger; this fetches every recorded expense) ---------- */
+
+    expenseHistory: function (limit) {
+      if (this.online && BT.api) {
+        return BT.api.get('/expenses?limit=' + (limit || 50)).then(function (r) {
+          return (r && r.expenses) || [];
+        });
+      }
+      /* offline demo: rebuild rows from the snapshot's ledger */
+      return Promise.resolve(this.state.ledger.filter(function (e) { return e.type === 'out'; })
+        .map(function (e, i) {
+          return {
+            id: -(i + 1), category: e.category || 'Other', amount: e.amount,
+            note: e.label && e.label !== e.category ? e.label : '',
+            method: e.method || 'Cash', date: 'Today', time: e.time
+          };
+        }));
+    },
+
+    updateExpense: function (id, changes) {
+      var self = this;
+      if (!this.online || !BT.api) return Promise.reject(new Error('Sign in to edit expenses'));
+      return BT.api.put('/expenses/' + encodeURIComponent(id), changes).then(function (r) {
+        if (!r || r.ok === false) return false;
+        if (r.period) {
+          self.state.revenuePeriod = r.period.revenue;
+          self.state.expensesPeriod = r.period.expenses;
+        }
+        self.save();
+        return true;
+      });
+    },
+
+    deleteExpense: function (id) {
+      var self = this;
+      if (!this.online || !BT.api) return Promise.reject(new Error('Sign in to delete expenses'));
+      return BT.api.del('/expenses/' + encodeURIComponent(id)).then(function (r) {
+        if (!r || r.ok === false) return false;
+        if (r.period) {
+          self.state.revenuePeriod = r.period.revenue;
+          self.state.expensesPeriod = r.period.expenses;
+        }
+        self.save();
+        return true;
+      });
+    },
+
+    /* ---------- Start from zero (new-shop handover) ----------
+       Server wipes inventory, customers, sales, expenses and the
+       ledger, and zeroes every money box. The signed-in user is
+       kept. Online the server's empty state is adopted; offline
+       the local snapshot is zeroed instead. */
+
+    zeroOut: function () {
+      var self = this;
+      function emptyState() {
+        self.state.items = [];
+        self.state.customers = [];
+        self.state.ledger = [{ time: '08:00', label: 'Starting fresh', type: 'info', amount: 0 }];
+        self.state.openingFloat = 0;
+        self.state.saleCounter = 1;
+        self.state.revenuePeriod = 0;
+        self.state.expensesPeriod = 0;
+        self.state.boxes = { cash: 0, bank: 0, momo: 0, credit: 0 };
+        self.save();
+      }
+      if (this.online && BT.api) {
+        return BT.api.post('/zero').then(function (r) {
+          if (!r || r.ok === false) return false;
+          emptyState();
+          return true;
+        });
+      }
+      emptyState();
+      return Promise.resolve(true);
     }
   };
 })();

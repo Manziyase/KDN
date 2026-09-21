@@ -52,6 +52,16 @@ localStorage demo mode and the footer shows **Offline demo mode**.
 | `/api/bootstrap`    | GET    | Full app state in one call (items, customers, ledger, period totals) |
 | `/api/sales`        | POST   | Record a sale — transaction: stock decrement, credit balance, ledger entry, sale counter |
 | `/api/expenses`     | POST   | Record an expense + ledger entry               |
+| `/api/expenses`     | GET    | Expense history (newest first, `?limit=&offset=`) |
+| `/api/expenses/:id` | PUT    | Edit an expense — rewrites the books entry and moves the box difference |
+| `/api/expenses/:id` | DELETE | Remove a mistaken expense — money returns to the box |
+| `/api/products`     | POST   | Add a product (optionally buys initial stock)  |
+| `/api/products/:id` | PUT    | Rename / reprice / change low-stock alert      |
+| `/api/products/:id` | DELETE | Remove an unsold item (sold items are protected) |
+| `/api/products/:id/restock` | POST | Add stock, booked as a Stock expense |
+| `/api/customers`    | POST   | Add a customer (zero balance)                  |
+| `/api/customers/:id`| PUT    | Rename a customer                              |
+| `/api/customers/:id`| DELETE | Remove a settled customer (debtors are protected) |
 | `/api/payments`     | POST   | Record a customer payment, update balance      |
 | `/api/reset`        | POST   | Wipe & reseed demo data                        |
 
@@ -66,7 +76,10 @@ products        id, name, price, stock, sold_week, low_threshold
 customers       id, name, balance, last_payment
 sales           number, customer_id, method, total, created_at
 sale_items      sale_id, product_id, qty, unit_price
-expenses        category, amount, note, created_at
+expenses        id, category, amount, note, method, created_at
+ledger_entries  label, type, amount, method, category, expense_id
+                (expense_id links auto-created books entries to
+                the expense so edits/deletes stay consistent)
 payments        customer_id, amount, method, created_at
 ledger_entries  label, type (info|in|out|credit), amount, method, category
 ```

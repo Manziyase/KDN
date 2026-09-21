@@ -119,6 +119,11 @@ CREATE TABLE IF NOT EXISTS expenses (
 ALTER TABLE expenses
   ADD COLUMN IF NOT EXISTS method ENUM('Cash','MoMo','Bank') NOT NULL DEFAULT 'Cash';
 
+/* Ledger rows created for an expense carry its id, so the expense
+   can later be edited or deleted and its books entry found again. */
+ALTER TABLE ledger_entries
+  ADD COLUMN IF NOT EXISTS expense_id INT NULL;
+
 CREATE TABLE IF NOT EXISTS payments (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   customer_id VARCHAR(40) NOT NULL,
@@ -152,6 +157,8 @@ DELETE FROM expenses;
 DELETE FROM products;
 DELETE FROM customers;
 DELETE FROM settings;
+-- Restart expense ids at 1 so the ledger seed below can link to them.
+ALTER TABLE expenses AUTO_INCREMENT = 1;
 -- NOTE: users & sessions are NOT wiped — accounts survive a reseed.
 
 -- The box values below are not arbitrary: they are what the seeded
@@ -230,16 +237,17 @@ SELECT s.id, 'oil',     1, 3500 FROM sales s WHERE s.number = 144 UNION ALL
 SELECT s.id, 'soap',    2, 700 FROM sales s WHERE s.number = 144;
 
 -- Expenses: 79,400 earlier this month + 7,000 today (4 entries)
-INSERT INTO expenses (category, amount, note, method, created_at) VALUES
-  ('Rent',      40000, 'Monthly shop rent',  'Cash', NOW() - INTERVAL 15 DAY),
-  ('Stock',     25000, 'Wholesale restock',  'Cash', NOW() - INTERVAL 7 DAY),
-  ('Utilities',  6400, 'Electricity bill',   'MoMo', NOW() - INTERVAL 3 DAY),
-  ('Transport',  4000, 'Taxi to market',     'Cash', NOW() - INTERVAL 3 DAY),
-  ('Airtime',    4000, 'Data bundles',       'MoMo', NOW() - INTERVAL 2 DAY),
-  ('Transport',  2000, 'Taxi to market',     'Cash', CONCAT(CURDATE(), ' 11:30:00')),
-  ('Staff',      3200, 'Staff lunch',        'Cash', CONCAT(CURDATE(), ' 12:15:00')),
-  ('Airtime',    1000, 'Airtime card',       'MoMo', CONCAT(CURDATE(), ' 14:00:00')),
-  ('Stock',       800, 'Plastic bags',       'Cash', CONCAT(CURDATE(), ' 16:40:00'));
+-- (explicit ids 1–9 so the ledger seed can reference expense_id)
+INSERT INTO expenses (id, category, amount, note, method, created_at) VALUES
+  (1, 'Rent',      40000, 'Monthly shop rent',  'Cash', NOW() - INTERVAL 15 DAY),
+  (2, 'Stock',     25000, 'Wholesale restock',  'Cash', NOW() - INTERVAL 7 DAY),
+  (3, 'Utilities',  6400, 'Electricity bill',   'MoMo', NOW() - INTERVAL 3 DAY),
+  (4, 'Transport',  4000, 'Taxi to market',     'Cash', NOW() - INTERVAL 3 DAY),
+  (5, 'Airtime',    4000, 'Data bundles',       'MoMo', NOW() - INTERVAL 2 DAY),
+  (6, 'Transport',  2000, 'Taxi to market',     'Cash', CONCAT(CURDATE(), ' 11:30:00')),
+  (7, 'Staff',      3200, 'Staff lunch',        'Cash', CONCAT(CURDATE(), ' 12:15:00')),
+  (8, 'Airtime',    1000, 'Airtime card',       'MoMo', CONCAT(CURDATE(), ' 14:00:00')),
+  (9, 'Stock',       800, 'Plastic bags',       'Cash', CONCAT(CURDATE(), ' 16:40:00'));
 
 -- Full cash books. The money boxes are derived from these entries
 -- (opening float + every 'in' − every 'out', bucketed by method),
@@ -265,12 +273,12 @@ INSERT INTO ledger_entries (label, type, amount, method, created_at) VALUES
   ('Sale #141', 'in',   800, 'Cash', NOW() - INTERVAL  2 DAY);
 
 -- Historical expenses earlier this month → the boxes they drained
-INSERT INTO ledger_entries (label, type, amount, method, category, created_at) VALUES
-  ('Monthly shop rent', 'out', 40000, 'Cash', 'Rent',      NOW() - INTERVAL 15 DAY),
-  ('Wholesale restock', 'out', 25000, 'Cash', 'Stock',     NOW() - INTERVAL  7 DAY),
-  ('Electricity bill',  'out',  6400, 'MoMo', 'Utilities', NOW() - INTERVAL  3 DAY),
-  ('Taxi to market',    'out',  4000, 'Cash', 'Transport', NOW() - INTERVAL  3 DAY),
-  ('Data bundles',      'out',  4000, 'MoMo', 'Airtime',   NOW() - INTERVAL  2 DAY);
+INSERT INTO ledger_entries (label, type, amount, method, category, expense_id, created_at) VALUES
+  ('Monthly shop rent', 'out', 40000, 'Cash', 'Rent',      1, NOW() - INTERVAL 15 DAY),
+  ('Wholesale restock', 'out', 25000, 'Cash', 'Stock',     2, NOW() - INTERVAL  7 DAY),
+  ('Electricity bill',  'out',  6400, 'MoMo', 'Utilities', 3, NOW() - INTERVAL  3 DAY),
+  ('Taxi to market',    'out',  4000, 'Cash', 'Transport', 4, NOW() - INTERVAL  3 DAY),
+  ('Data bundles',      'out',  4000, 'MoMo', 'Airtime',   5, NOW() - INTERVAL  2 DAY);
 
 -- Banked the week's cash twice (cash box → bank box)
 INSERT INTO ledger_entries (label, type, amount, method, category, created_at) VALUES
@@ -285,16 +293,16 @@ INSERT INTO ledger_entries (label, type, amount, method, created_at) VALUES
   ('Sale (credit) · Jean Bosco',  'credit', 1200, 'Credit', NOW() - INTERVAL  3 DAY);
 
 -- Today's cash ledger (matches the sales/expenses above)
-INSERT INTO ledger_entries (label, type, amount, method, category, created_at) VALUES
-  ('Opening float', 'info', 53400, NULL, NULL,       CONCAT(CURDATE(), ' 08:00:00')),
-  ('Sale #142',     'in',    6500, 'Cash', NULL,     CONCAT(CURDATE(), ' 09:12:00')),
-  ('Sale #143',     'in',   12400, 'Cash', NULL,     CONCAT(CURDATE(), ' 10:05:00')),
-  ('Transport',     'out',   2000, 'Cash', 'Transport',CONCAT(CURDATE(), ' 11:30:00')),
-  ('Staff lunch',   'out',   3200, 'Cash', 'Staff',    CONCAT(CURDATE(), ' 12:15:00')),
-  ('Sale #144',     'in',   12100, 'MoMo', NULL,     CONCAT(CURDATE(), ' 13:20:00')),
-  ('Airtime',       'out',   1000, 'MoMo', 'Airtime',  CONCAT(CURDATE(), ' 14:00:00')),
-  ('Sale (credit) · Claudine M.', 'credit', 800, 'Credit', NULL, CONCAT(CURDATE(), ' 15:30:00')),
-  ('Plastic bags',  'out',    800, 'Cash', 'Stock',    CONCAT(CURDATE(), ' 16:40:00'));
+INSERT INTO ledger_entries (label, type, amount, method, category, expense_id, created_at) VALUES
+  ('Opening float', 'info', 53400, NULL, NULL,       NULL, CONCAT(CURDATE(), ' 08:00:00')),
+  ('Sale #142',     'in',    6500, 'Cash', NULL,     NULL, CONCAT(CURDATE(), ' 09:12:00')),
+  ('Sale #143',     'in',   12400, 'Cash', NULL,     NULL, CONCAT(CURDATE(), ' 10:05:00')),
+  ('Transport',     'out',   2000, 'Cash', 'Transport',6,    CONCAT(CURDATE(), ' 11:30:00')),
+  ('Staff lunch',   'out',   3200, 'Cash', 'Staff',    7,    CONCAT(CURDATE(), ' 12:15:00')),
+  ('Sale #144',     'in',   12100, 'MoMo', NULL,     NULL, CONCAT(CURDATE(), ' 13:20:00')),
+  ('Airtime',       'out',   1000, 'MoMo', 'Airtime',  8,    CONCAT(CURDATE(), ' 14:00:00')),
+  ('Sale (credit) · Claudine M.', 'credit', 800, 'Credit', NULL, NULL, CONCAT(CURDATE(), ' 15:30:00')),
+  ('Plastic bags',  'out',    800, 'Cash', 'Stock',    9,    CONCAT(CURDATE(), ' 16:40:00'));
 
 -- ---------- Demo account ----------
 -- Password: demo1234  (PBKDF2-SHA512, 150k iterations, static salt)

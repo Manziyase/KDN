@@ -41,6 +41,15 @@ BT.pages.inventory = {
                     data-name="${ui.esc(i.name)}" type="button">
               <i class="ti ti-package" aria-hidden="true"></i> Restock
             </button>
+            <button class="btn btn-sm edit-btn" data-id="${ui.esc(i.id)}" type="button"
+                    aria-label="Edit ${ui.esc(i.name)}">
+              <i class="ti ti-pencil" aria-hidden="true"></i> Edit
+            </button>
+            <button class="btn btn-sm delete-btn" data-id="${ui.esc(i.id)}"
+                    data-name="${ui.esc(i.name)}" type="button"
+                    aria-label="Delete ${ui.esc(i.name)}">
+              <i class="ti ti-trash" aria-hidden="true"></i> Delete
+            </button>
           </td>
         </tr>`;
     }).join('');
@@ -267,6 +276,123 @@ BT.pages.inventory = {
           m.close();
           ui.toast('Restocked ' + n + ' × ' + name + ' for ' + ui.fmtMoney(item.price * n));
           BT.router.render();
+        }).catch(function (err) { ui.toast(err.message); });
+      });
+    });
+
+    /* ---------- Edit item wiring (modal dialog) ---------- */
+
+    el.addEventListener('click', function (e) {
+      var btn = e.target.closest('.edit-btn');
+      if (!btn) return;
+
+      var id = btn.getAttribute('data-id');
+      var item = st.state.items.find(function (i) { return i.id === id; });
+      if (!item) return;
+
+      var m = ui.modal(`
+        <div class="modal-head">
+          <h2><i class="ti ti-pencil" aria-hidden="true"></i> Edit ${ui.esc(item.name)}</h2>
+          <button class="icon-btn" type="button" data-close="1" aria-label="Close">
+            <i class="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="edit-item-form" novalidate>
+            <div class="form-grid">
+              <div class="field span-2">
+                <label for="ei-name">Item name</label>
+                <input id="ei-name" type="text" maxlength="60" value="${ui.esc(item.name)}">
+              </div>
+              <div class="field">
+                <label for="ei-price">Selling price (${ui.currency()})</label>
+                <input id="ei-price" type="text" inputmode="numeric" value="${item.price}">
+              </div>
+              <div class="field">
+                <label for="ei-low">Alert me at (low-stock level)</label>
+                <input id="ei-low" type="number" min="1" value="${item.low}" inputmode="numeric">
+              </div>
+            </div>
+            <p class="hint">Stock changes through sales and restocking, so it is not edited here.</p>
+            <p class="auth-error" id="ei-error" hidden></p>
+            <div class="modal-actions">
+              <button class="btn" type="button" data-close="1">Cancel</button>
+              <button class="btn btn-primary" type="submit">
+                <i class="ti ti-check" aria-hidden="true"></i> Save changes
+              </button>
+            </div>
+          </form>
+        </div>`);
+
+      var errEl = m.el.querySelector('#ei-error');
+
+      m.el.querySelector('#edit-item-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = m.el.querySelector('#ei-name').value.trim();
+        var price = ui.parseNum(m.el.querySelector('#ei-price').value);
+        var low = Math.max(1, Math.round(Number(m.el.querySelector('#ei-low').value) || 10));
+
+        if (name.length < 2) {
+          errEl.textContent = 'Enter the item name.';
+          errEl.hidden = false;
+          return;
+        }
+        if (!price || price <= 0) {
+          errEl.textContent = 'Enter a valid selling price.';
+          errEl.hidden = false;
+          return;
+        }
+
+        st.updateProduct(id, { name: name, price: price, low: low }).then(function (ok) {
+          if (ok === false) return; /* error surfaced by the store */
+          m.close();
+          ui.toast('Item updated — ' + name);
+          BT.router.render();
+        }).catch(function (err) {
+          errEl.textContent = err.message;
+          errEl.hidden = false;
+        });
+      });
+    });
+
+    /* ---------- Delete item wiring (confirm dialog) ---------- */
+
+    el.addEventListener('click', function (e) {
+      var btn = e.target.closest('.delete-btn');
+      if (!btn) return;
+
+      var id = btn.getAttribute('data-id');
+      var name = btn.getAttribute('data-name');
+
+      var m = ui.modal(`
+        <div class="modal-head">
+          <h2><i class="ti ti-trash" aria-hidden="true"></i> Delete ${ui.esc(name)}?</h2>
+          <button class="icon-btn" type="button" data-close="1" aria-label="Close">
+            <i class="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p>This removes <b>${ui.esc(name)}</b> from your inventory list. Past sale totals stay in the books — only this item's line items are removed with it.</p>
+          <p class="auth-error" id="di-error" hidden></p>
+          <div class="modal-actions">
+            <button class="btn" type="button" data-close="1">Cancel</button>
+            <button class="btn btn-danger" type="button" id="di-confirm">
+              <i class="ti ti-trash" aria-hidden="true"></i> Delete item
+            </button>
+          </div>
+        </div>`);
+
+      var errEl = m.el.querySelector('#di-error');
+
+      m.el.querySelector('#di-confirm').addEventListener('click', function () {
+        st.deleteProduct(id).then(function (ok) {
+          if (ok === false) return; /* error surfaced by the store */
+          m.close();
+          ui.toast('Deleted ' + name);
+          BT.router.render();
+        }).catch(function (err) {
+          errEl.textContent = err.message;
+          errEl.hidden = false;
         });
       });
     });

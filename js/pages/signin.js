@@ -69,11 +69,13 @@ BT.pages = BT.pages || {};
 
   function wireOfflineActions(el, rerender) {
     var retry = el.querySelector('#auth-retry');
-    if (retry) {
-      retry.addEventListener('click', function () {
-        retry.disabled = true;
-        retry.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i> Checking…';
-        BT.store.reconnect().then(function (ok) {
+    if (retry) {        retry.addEventListener('click', function () {
+          retry.disabled = true;
+          retry.innerHTML = '<i class="ti ti-loader-2" aria-hidden="true"></i> Checking…';
+          /* re-probe first: this page may be served by another static
+             server (Live Server etc.) and the API only just started */
+          var ready = BT.api.reprobe ? BT.api.reprobe() : Promise.resolve();
+          ready.then(function () { return BT.store.reconnect(); }).then(function (ok) {
           if (ok) {
             BT.ui.toast('Connected! You can sign in now.');
             refreshStatusEl();
@@ -122,7 +124,8 @@ BT.pages = BT.pages || {};
     var box = el.querySelector(sel);
     return function (msg) {
       box.textContent = msg;
-      box.hidden = false;
+      box.hidden = !msg;
+      return box;
     };
   }
 

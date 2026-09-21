@@ -100,6 +100,31 @@ async function main() {
     r = await call('POST', '/products/smoke-item/restock', { qty: 3, method: 'MoMo' });
     check('restock ok', r.data.ok === true && r.data.stock === 10, r.data);
 
+    console.log('\n— product update / delete —');
+    r = await call('PUT', '/products/smoke-item', { name: 'Smoke Item Renamed', price: 1200, low: 5 });
+    check('product update ok', r.data.ok === true && r.data.item.name === 'Smoke Item Renamed' && r.data.item.price === 1200, r.data);
+    r = await call('PUT', '/products/no-such-item', { name: 'X', price: 5 });
+    check('product update rejects unknown id', r.data.ok === false, r.data);
+
+    r = await call('POST', '/products', { name: 'Smoke Tmp', price: 300, stock: 0 });
+    check('temp product added', r.data.ok === true, r.data);
+    r = await call('DELETE', '/products/smoke-item');
+    check('product with sales deleted (line items removed)', r.data.ok === true, r.data);
+    r = await call('DELETE', '/products/smoke-tmp');
+    check('unsold product deleted', r.data.ok === true, r.data);
+
+    console.log('\n— customers CRUD —');
+    r = await call('POST', '/customers', { name: 'Smoke Customer' });
+    check('customer added', r.data.ok === true && r.data.customer && r.data.customer.id === 'smoke-customer', r.data);
+    r = await call('POST', '/customers', { name: 'Smoke Customer' });
+    check('duplicate customer rejected', r.data.ok === false, r.data);
+    r = await call('PUT', '/customers/smoke-customer', { name: 'Smoke Renamed Customer' });
+    check('customer renamed', r.data.ok === true && r.data.customer.name === 'Smoke Renamed Customer', r.data);
+    r = await call('DELETE', '/customers/amina');
+    check('customer with debt cannot be deleted', r.data.ok === false, r.data);
+    r = await call('DELETE', '/customers/smoke-customer');
+    check('settled customer deleted', r.data.ok === true, r.data);
+
     console.log('\n— sale / expense / payment / transfer —');
     r = await call('GET', '/bootstrap');
     const cashBeforeSale = r.data.boxes.cash;
@@ -128,6 +153,34 @@ async function main() {
     r = await call('POST', '/boxes/transfer', { from: 'cash_box', to: 'cash_box', amount: 100 });
     check('same-box transfer rejected', r.data.ok === false, r.data);
 
+    console.log('\n— expenses: history / update / delete —');
+    r = await call('GET', '/bootstrap');
+    const cashBeforeExpense = r.data.boxes.cash;
+
+    r = await call('POST', '/expenses', { category: 'Transport', amount: 500, method: 'Cash', note: 'smoke-edit' });
+    check('expense created', r.data.ok === true, r.data);
+
+    r = await call('GET', '/expenses?limit=5');
+    check('expense history ok', r.data.ok === true && r.data.expenses.length >= 1 && r.data.total >= 1, r.data);
+    const expId = r.data.expenses[0].id;
+    check('history newest first', r.data.expenses[0].note === 'smoke-edit', r.data.expenses[0]);
+
+    r = await call('GET', '/bootstrap');
+    const momoBeforeEdit = r.data.boxes.momo;
+
+    r = await call('PUT', '/expenses/' + expId, { category: 'Staff', amount: 700, note: 'smoke-edited', method: 'MoMo' });
+    check('expense updated', r.data.ok === true && r.data.expense.amount === 700, r.data);
+    r = await call('GET', '/bootstrap');
+    check('expense edit moved boxes', r.data.boxes.cash === cashBeforeExpense + 500 - 700 &&
+      r.data.boxes.momo === momoBeforeEdit - 700, r.data.boxes);
+
+    r = await call('DELETE', '/expenses/' + expId);
+    check('expense deleted', r.data.ok === true, r.data);
+    r = await call('GET', '/bootstrap');
+    check('delete restored the box', r.data.boxes.cash === cashBeforeExpense, r.data.boxes);
+    r = await call('PUT', '/expenses/' + expId, { amount: 100 });
+    check('editing deleted expense rejected', r.data.ok === false, r.data);
+
     console.log('\n— auth guard —');
     const saved = cookie;
     cookie = 'bt_session=forged';
@@ -139,6 +192,19 @@ async function main() {
     check('logout ok', r.data.ok === true, r.data);
     r = await call('GET', '/auth/me');
     check('me null after logout', r.data.user === null, r.data);
+
+    console.log('\n— start from zero —');
+    r = await call('POST', '/auth/login', { email: 'demo@biztrack.app', password: 'demo1234' });
+    check('re-login ok', r.data.ok === true, r.data);
+    r = await call('POST', '/zero');
+    check('zero ok — boxes at 0', r.data.ok === true && Number(r.data.settings.cash) === 0 &&
+      Number(r.data.settings.bank) === 0 && Number(r.data.settings.momo) === 0, r.data);
+    r = await call('GET', '/bootstrap');
+    check('shop is empty', r.data.items.length === 0 && r.data.customers.length === 0 &&
+      Number(r.data.openingFloat) === 0,
+      { items: r.data.items.length, customers: r.data.customers.length, opening: r.data.openingFloat });
+    r = await call('POST', '/reset');
+    check('demo data restored after zero', r.data.ok === true, r.data);
 
     console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
   } catch (err) {

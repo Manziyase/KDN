@@ -96,7 +96,80 @@ BT.pages.settings = {
           </div>
         </div>
 
+        <div class="card">
+          <div class="card-head"><h2><i class="ti ti-rocket" aria-hidden="true"></i> Start from zero</h2></div>
+          <div class="card-body">
+            <p class="hint">Handing the app to a new user? This removes <b>all</b> products, customers,
+            sales, expenses and ledger history, and sets every money box to 0 — a pristine shop
+            ready for real data. Your login is kept.</p>
+            <button class="btn btn-danger btn-block" id="zero-btn" type="button">
+              <i class="ti ti-eraser" aria-hidden="true"></i> Start from zero
+            </button>
+          </div>
+        </div>
+
       </div>`;
+
+    /* ---------- Start from zero (double-confirm) ---------- */
+
+    el.querySelector('#zero-btn').addEventListener('click', function () {
+      var m = BT.ui.modal(`
+        <div class="modal-head">
+          <h2><i class="ti ti-eraser" aria-hidden="true"></i> Start from zero?</h2>
+          <button class="icon-btn" type="button" data-close="1" aria-label="Close">
+            <i class="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p>This permanently removes <b>everything</b>:</p>
+          <ul>
+            <li>All products and stock</li>
+            <li>All customers and their balances</li>
+            <li>All sales, expenses and payments</li>
+            <li>The whole cash ledger</li>
+          </ul>
+          <p>Every money box goes to <b>0</b>. Your account stays signed in.
+          <b>This cannot be undone.</b></p>
+          <div class="field">
+            <label for="zz-confirm">Type <b>ZERO</b> to confirm</label>
+            <input id="zz-confirm" type="text" autocomplete="off" placeholder="ZERO">
+          </div>
+          <p class="auth-error" id="zz-error" hidden></p>
+          <div class="modal-actions">
+            <button class="btn" type="button" data-close="1">Cancel</button>
+            <button class="btn btn-danger" type="button" id="zz-go" disabled>
+              <i class="ti ti-eraser" aria-hidden="true"></i> Erase everything
+            </button>
+          </div>
+        </div>`);
+
+      var input = m.el.querySelector('#zz-confirm');
+      var goBtn = m.el.querySelector('#zz-go');
+      var errEl = m.el.querySelector('#zz-error');
+
+      input.addEventListener('input', function () {
+        goBtn.disabled = input.value.trim().toUpperCase() !== 'ZERO';
+      });
+
+      goBtn.addEventListener('click', function () {
+        goBtn.disabled = true;
+        BT.store.zeroOut().then(function (ok) {
+          if (ok === false) {
+            errEl.textContent = 'Could not reset — try again.';
+            errEl.hidden = false;
+            goBtn.disabled = false;
+            return;
+          }
+          m.close();
+          BT.ui.toast('Fresh start — everything is at zero');
+          BT.router.render();
+        }).catch(function (err) {
+          errEl.textContent = err.message;
+          errEl.hidden = false;
+          goBtn.disabled = false;
+        });
+      });
+    });
 
     function persist() {
       BT.store.applyPrefs({

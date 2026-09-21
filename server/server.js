@@ -48,7 +48,7 @@ app.use(function (req, res, next) {
   } else {
     res.setHeader('Access-Control-Allow-Origin', '*');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
@@ -311,9 +311,9 @@ app.post('/api/products', function (req, res) {
           const label = (exists ? 'Restock · ' : 'Stock purchase · ') + name;
           return exec('INSERT INTO expenses (category, amount, note, method) VALUES (?, ?, ?, ?)',
             ['Stock', cost, label, method])
-            .then(function () {
-              return exec('INSERT INTO ledger_entries (label, type, amount, method, category) VALUES (?, ?, ?, ?, ?)',
-                [label, 'out', cost, method, 'Stock']);
+            .then(function (ins) {
+              return exec('INSERT INTO ledger_entries (label, type, amount, method, category, expense_id) VALUES (?, ?, ?, ?, ?, ?)',
+                [label, 'out', cost, method, 'Stock', ins[0].insertId]);
             })
             .then(function () {
               const box = boxColumn(method);
@@ -350,9 +350,9 @@ app.post('/api/products/:id/restock', function (req, res) {
               return exec('INSERT INTO expenses (category, amount, note, method) VALUES (?, ?, ?, ?)',
                 ['Stock', cost, 'Restock · ' + item.name + ' ×' + qty, method]);
             })
-            .then(function () {
-              return exec('INSERT INTO ledger_entries (label, type, amount, method, category) VALUES (?, ?, ?, ?, ?)',
-                ['Restock · ' + item.name, 'out', cost, method, 'Stock']);
+            .then(function (ins) {
+              return exec('INSERT INTO ledger_entries (label, type, amount, method, category, expense_id) VALUES (?, ?, ?, ?, ?, ?)',
+                ['Restock · ' + item.name, 'out', cost, method, 'Stock', ins[0].insertId]);
             })
             .then(function () {
               return exec('UPDATE settings SET ' + box + ' = ' + box + ' - ? WHERE id = 1', [cost]);
@@ -368,6 +368,59 @@ app.post('/api/products/:id/restock', function (req, res) {
         });
     });
   }).catch(function (err) { fail(res, 400, err.message); });
+});
+
+/* ---------- PUT /api/products/:id — rename / reprice / change
+   the low-stock alert. Stock itself changes through sales and
+   restock, so it is not editable here. */
+
+app.put('/api/products/:id', function (req, res) {
+  auth.currentUser(req).then(function (user) {
+    if (!user) throw new Error('Please sign in first');
+    const body = req.body || {};
+    const name = String(body.name || '').trim().slice(0, 80);
+    const price = Math.round(Number(body.price));
+    const low = Math.max(1, Math.round(Number(body.low) || 10));
+
+    if (name.length < 2) throw new Error('Item name is too short');
+    if (!price || price <= 0) throw new Error('A valid price is required');
+
+    return db.query('UPDATE products SET name = ?, price = ?, low_threshold = ? WHERE id = ?',
+      [name, price, low, req.params.id]).then(function (r) {
+        if (!r.affectedRows) throw new Error('Unknown item');
+        return db.query('SELECT id, name, price, stock, sold_week, low_threshold FROM products WHERE id = ?', [req.params.id]);
+      }).then(function (rows) {
+        const p = rows[0];
+        res.json({ ok: true, item: {
+          id: p.id, name: p.name, price: p.price,
+          stock: p.stock, soldWeek: p.sold_week, low: p.low_threshold
+        }});
+      });
+  }).catch(function (err) { fail(res, 400, err.message); });
+});
+
+/* ---------- DELETE /api/products/:id ----------
+   Any item can be deleted. Its line items (sale_items) are
+   removed with it; the sale headers (totals, method, dates)
+   stay in the books so money remains explainable. */
+
+app.delete('/api/products/:id', function (req, res) {
+  auth.currentUser(req).then(function (user) {
+    if (!user) throw new Error('Please sign in first');
+    return db.withTransaction(function (exec) {
+      return exec('SELECT id, name FROM products WHERE id = ? FOR UPDATE', [req.params.id])
+        .then(function (p) {
+          const item = p[0][0];
+          if (!item) throw new Error('Unknown item');
+          return exec('DELETE FROM sale_items WHERE product_id = ?', [req.params.id])
+            .then(function () {
+              return exec('DELETE FROM products WHERE id = ?', [req.params.id]);
+            })
+            .then(function () { return { id: req.params.id, name: item.name }; });
+        });
+    });
+  }).then(function (out) { res.json(Object.assign({ ok: true }, out)); })
+    .catch(function (err) { fail(res, 400, err.message); });
 });
 
 /* ============================================================
@@ -425,6 +478,82 @@ app.post('/api/boxes/transfer', function (req, res) {
         });
     });
   }).catch(function (err) { fail(res, 400, err.message); });
+});
+
+/* ============================================================
+   Customers  (add / rename / remove)
+   ============================================================ */
+
+function customerSlug(name) {
+  return String(name).toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'customer';
+}
+
+function customerRow(c) {
+  return {
+    id: c.id, name: c.name, balance: c.balance,
+    lastPayment: c.last_payment ? db.shortDate(c.last_payment) : '—'
+  };
+}
+
+/* ---------- POST /api/customers — add a customer ---------- */
+
+app.post('/api/customers', function (req, res) {
+  auth.currentUser(req).then(function (user) {
+    if (!user) throw new Error('Please sign in first');
+    const name = String((req.body || {}).name || '').trim().slice(0, 80);
+    if (name.length < 2) throw new Error('Customer name is too short');
+    const id = customerSlug(name);
+
+    return db.query('SELECT id FROM customers WHERE id = ?', [id]).then(function (f) {
+      if (f.length) throw new Error('A customer with this name already exists');
+      return db.query('INSERT INTO customers (id, name, balance) VALUES (?, ?, 0)', [id, name]);
+    }).then(function () {
+      return db.query('SELECT id, name, balance, last_payment FROM customers WHERE id = ?', [id]);
+    }).then(function (rows) {
+      res.json({ ok: true, customer: customerRow(rows[0]) });
+    });
+  }).catch(function (err) { fail(res, 400, err.message); });
+});
+
+/* ---------- PUT /api/customers/:id — rename ---------- */
+
+app.put('/api/customers/:id', function (req, res) {
+  auth.currentUser(req).then(function (user) {
+    if (!user) throw new Error('Please sign in first');
+    const name = String((req.body || {}).name || '').trim().slice(0, 80);
+    if (name.length < 2) throw new Error('Customer name is too short');
+
+    return db.query('UPDATE customers SET name = ? WHERE id = ?', [name, req.params.id]).then(function (r) {
+      if (!r.affectedRows) throw new Error('Unknown customer');
+      return db.query('SELECT id, name, balance, last_payment FROM customers WHERE id = ?', [req.params.id]);
+    }).then(function (rows) {
+      res.json({ ok: true, customer: customerRow(rows[0]) });
+    });
+  }).catch(function (err) { fail(res, 400, err.message); });
+});
+
+/* ---------- DELETE /api/customers/:id ----------
+   Customers with an outstanding balance can't be removed until
+   the debt is settled (or written off via a full payment). */
+
+app.delete('/api/customers/:id', function (req, res) {
+  auth.currentUser(req).then(function (user) {
+    if (!user) throw new Error('Please sign in first');
+    return db.withTransaction(function (exec) {
+      return exec('SELECT id, name, balance FROM customers WHERE id = ? FOR UPDATE', [req.params.id])
+        .then(function (c) {
+          const cust = c[0][0];
+          if (!cust) throw new Error('Unknown customer');
+          if (cust.balance > 0) {
+            throw new Error(cust.name + ' still owes ' + cust.balance + ' — record a payment first');
+          }
+          return exec('DELETE FROM customers WHERE id = ?', [req.params.id]);
+        })
+        .then(function () { return { id: req.params.id }; });
+    });
+  }).then(function (out) { res.json(Object.assign({ ok: true }, out)); })
+    .catch(function (err) { fail(res, 400, err.message); });
 });
 
 /* ---------- GET /api/bootstrap ---------- */
@@ -684,9 +813,9 @@ app.post('/api/expenses', function (req, res) {
   db.withTransaction(function (exec) {
     const box = boxColumn(method);
     return exec('INSERT INTO expenses (category, amount, note, method) VALUES (?, ?, ?, ?)', [category, amount, note || null, method])
-      .then(function () {
-        return exec('INSERT INTO ledger_entries (label, type, amount, method, category, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-          [note || category, 'out', amount, method, category]);
+      .then(function (ins) {
+        return exec('INSERT INTO ledger_entries (label, type, amount, method, category, expense_id, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
+          [note || category, 'out', amount, method, category, ins[0].insertId]);
       })
       .then(function () {
         /* the money leaves the box it was paid from */
@@ -711,6 +840,127 @@ app.post('/api/expenses', function (req, res) {
   }).then(function (result) {
     res.json(Object.assign({ ok: true }, result));
   }).catch(function (err) { fail(res, 400, err.message); });
+});
+
+/* ---------- GET /api/expenses?limit=&offset= — history ---------- */
+
+app.get('/api/expenses', function (req, res) {
+  auth.currentUser(req).then(function (user) {
+    if (!user) throw new Error('Please sign in first');
+    const limit = Math.min(200, Math.max(1, Math.round(Number(req.query.limit) || 50)));
+    const offset = Math.max(0, Math.round(Number(req.query.offset) || 0));
+
+    return db.query('SELECT COUNT(*) AS n FROM expenses').then(function (c) {
+      return db.query(
+        'SELECT id, category, amount, note, method, created_at FROM expenses ' +
+        'ORDER BY created_at DESC, id DESC LIMIT ' + limit + ' OFFSET ' + offset
+      ).then(function (rows) {
+        res.json({
+          ok: true,
+          total: c[0].n,
+          expenses: rows.map(function (x) {
+            return {
+              id: x.id, category: x.category, amount: x.amount,
+              note: x.note || '', method: x.method,
+              /* created_at arrives as "YYYY-MM-DD HH:MM:SS" — shortDate
+                 wants just the date part */
+              date: db.shortDate(String(x.created_at).slice(0, 10)), time: db.hhmm(x.created_at)
+            };
+          })
+        });
+      });
+    });
+  }).catch(function (err) { fail(res, 400, err.message); });
+});
+
+/* ---------- PUT /api/expenses/:id — fix category/note/amount/method ----------
+   Amount edits rewrite the linked ledger entry and move the
+   difference back out of / into the right boxes. */
+
+app.put('/api/expenses/:id', function (req, res) {
+  auth.currentUser(req).then(function (user) {
+    if (!user) throw new Error('Please sign in first');
+    const body = req.body || {};
+    const amount = Math.round(Number(body.amount));
+    if (!amount || amount <= 0) throw new Error('A valid amount is required');
+    const category = String(body.category || 'Other').slice(0, 40);
+    const note = String(body.note || '').slice(0, 120);
+    const method = ['MoMo', 'Bank'].indexOf(body.method) !== -1 ? body.method : 'Cash';
+
+    return db.withTransaction(function (exec) {
+      return exec('SELECT id, amount, method FROM expenses WHERE id = ? FOR UPDATE', [req.params.id])
+        .then(function (r) {
+          const exp = r[0][0];
+          if (!exp) throw new Error('Unknown expense');
+          const diff = amount - exp.amount;
+          const label = note || category;
+
+          return exec('UPDATE expenses SET category = ?, amount = ?, note = ?, method = ? WHERE id = ?',
+            [category, amount, note || null, method, exp.id])
+            .then(function () {
+              return exec('SELECT id FROM ledger_entries WHERE expense_id = ?', [exp.id]);
+            })
+            .then(function (l) {
+              const linked = l[0] || []; /* exec() resolves [rows, fields] */
+              if (linked.length) {
+                /* linked books entry — edit it in place */
+                return exec('UPDATE ledger_entries SET label = ?, amount = ?, method = ?, category = ? WHERE id = ?',
+                  [label, amount, method, category, linked[0].id])
+                  .then(function () {
+                    if (!diff) return null;
+                    /* difference returns to the old box, leaves the new one */
+                    return exec('UPDATE settings SET ' + boxColumn(exp.method) + ' = ' + boxColumn(exp.method) +
+                      ' + ?, ' + boxColumn(method) + ' = ' + boxColumn(method) + ' - ? WHERE id = 1', [diff, diff]);
+                  });
+              }
+              /* legacy row without a link — refund the old amount, book the new one */
+              return exec('UPDATE settings SET ' + boxColumn(exp.method) + ' = ' + boxColumn(exp.method) + ' + ? WHERE id = 1', [exp.amount])
+                .then(function () {
+                  return exec('INSERT INTO ledger_entries (label, type, amount, method, category, expense_id, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
+                    [label, 'out', amount, method, category, exp.id]);
+                })
+                .then(function () {
+                  return exec('UPDATE settings SET ' + boxColumn(method) + ' = ' + boxColumn(method) + ' - ? WHERE id = 1', [amount]);
+                });
+            })
+            .then(function () { return periodSums(exec); })
+            .then(function (period) {
+              return {
+                expense: { id: exp.id, category: category, amount: amount, note: note, method: method },
+                period: period
+              };
+            });
+        });
+    });
+  }).then(function (out) { res.json(Object.assign({ ok: true }, out)); })
+    .catch(function (err) { fail(res, 400, err.message); });
+});
+
+/* ---------- DELETE /api/expenses/:id — remove a mistaken entry ----------
+   The money returns to the box it was paid from and the linked
+   books entry is removed with it. */
+
+app.delete('/api/expenses/:id', function (req, res) {
+  auth.currentUser(req).then(function (user) {
+    if (!user) throw new Error('Please sign in first');
+    return db.withTransaction(function (exec) {
+      return exec('SELECT id, amount, method FROM expenses WHERE id = ? FOR UPDATE', [req.params.id])
+        .then(function (r) {
+          const exp = r[0][0];
+          if (!exp) throw new Error('Unknown expense');
+          return exec('DELETE FROM expenses WHERE id = ?', [exp.id])
+            .then(function () {
+              return exec('DELETE FROM ledger_entries WHERE expense_id = ?', [exp.id]);
+            })
+            .then(function () {
+              return exec('UPDATE settings SET ' + boxColumn(exp.method) + ' = ' + boxColumn(exp.method) + ' + ? WHERE id = 1', [exp.amount]);
+            })
+            .then(function () { return periodSums(exec); })
+            .then(function (period) { return { id: exp.id, period: period }; });
+        });
+    });
+  }).then(function (out) { res.json(Object.assign({ ok: true }, out)); })
+    .catch(function (err) { fail(res, 400, err.message); });
 });
 
 /* ---------- POST /api/payments ---------- */
@@ -781,6 +1031,41 @@ app.post('/api/payments', function (req, res) {
 app.post('/api/reset', function (req, res) {
   seed().then(function () { res.json({ ok: true }); })
     .catch(function (err) { fail(res, 500, err.message); });
+});
+
+/* ---------- POST /api/zero — start over with an empty shop ----------
+   Removes every product, customer, sale, expense, payment and
+   ledger entry, and sets all money boxes to 0 with the sale
+   counter at #1. Your login (users/sessions) is kept, so the
+   app is handed over in a pristine state, ready for real data. */
+
+app.post('/api/zero', function (req, res) {
+  auth.currentUser(req).then(function (user) {
+    if (!user) throw new Error('Please sign in first');
+    return db.withTransaction(function (exec) {
+      return exec('DELETE FROM sale_items')
+        .then(function () { return exec('DELETE FROM sales'); })
+        .then(function () { return exec('DELETE FROM payments'); })
+        .then(function () { return exec('DELETE FROM expenses'); })
+        .then(function () { return exec('DELETE FROM ledger_entries'); })
+        .then(function () { return exec('DELETE FROM products'); })
+        .then(function () { return exec('DELETE FROM customers'); })
+        .then(function () {
+          return exec('UPDATE settings SET opening_float = 0, sale_counter = 1, ' +
+            'cash_box = 0, bank_box = 0, momo_box = 0 WHERE id = 1');
+        });
+    }).then(function () {
+      return db.query('SELECT opening_float, sale_counter, cash_box, bank_box, momo_box FROM settings WHERE id = 1');
+    }).then(function (r) {
+      res.json({
+        ok: true,
+        settings: {
+          openingFloat: r[0].opening_float, saleCounter: r[0].sale_counter,
+          cash: r[0].cash_box, bank: r[0].bank_box, momo: r[0].momo_box
+        }
+      });
+    });
+  }).catch(function (err) { fail(res, 400, err.message); });
 });
 
 /* ---------- API 404 + error handling ---------- */
