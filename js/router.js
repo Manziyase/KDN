@@ -16,10 +16,10 @@ BT.router = (function () {
   var routes = {};
   var container = null;
   var started = false;
-  var DEFAULT_ROUTE = 'home'; /* landing page comes first */
+  var DEFAULT_ROUTE = 'home'; /* auth hub comes first */
 
   /* Routes that render without the app shell (full-screen pages) */
-  var SHELL_LESS = ['home', 'signin', 'signup'];
+  var SHELL_LESS = ['home', 'signin', 'signup', 'forgot', 'reset'];
 
   function register(name, page) {
     routes[name] = page;
@@ -65,10 +65,16 @@ BT.router = (function () {
     if (!container) container = document.getElementById('page');
     var r = parse();
 
-    /* Auth gate (app.js decides who sees what) */
+    /* Auth gate (app.js decides who sees what). The gate may
+       redirect by changing the hash — that re-fires render — but
+       if we're already at the target (e.g. pasted #/dashboard
+       while signed out and home IS the default) render through
+       to avoid a visible blank flash. */
     if (BT.app && BT.app.gate) {
+      var before = r.name;
       r = BT.app.gate(r);
-      if (!r) return; /* redirecting — the new hash re-triggers render */
+      if (!r) return;
+      if (r.name !== before) BT.app.updateUserChip();
     }
 
     var page = routes[r.name];
@@ -113,7 +119,7 @@ BT.router = (function () {
       }).join('&');
       q = q ? '?' + q : '';
     }
-    if (parse().name === name && !q) {
+    if (location.hash === '#/' + name + q) {
       render(); /* same route — force refresh */
       return;
     }

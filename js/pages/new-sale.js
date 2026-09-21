@@ -14,7 +14,7 @@ BT.pages.newSale = {
     var s = st.state;
 
     var options = s.items.map(function (i) {
-      return `<option value="${i.id}">${ui.esc(i.name)} — ${ui.rwf(i.price)} (${i.stock} in stock)</option>`;
+      return `<option value="${i.id}">${ui.esc(i.name)} — ${ui.fmtMoney(i.price)} (${i.stock} in stock)</option>`;
     }).join('');
 
     var methods = ['Cash', 'MoMo', 'Credit'].map(function (m, i) {
@@ -26,6 +26,14 @@ BT.pages.newSale = {
     }).join('');
 
     el.innerHTML = `
+      ${BT.app.demoMode() ? `
+      <div class="alert" role="status">
+        <i class="ti ti-info-circle" aria-hidden="true"></i>
+        <div class="alert-body">
+          <strong>Demo mode</strong>
+          <span>Sign in to record real sales — try it and see how the app works.</span>
+        </div>
+      </div>` : ''}
       <div class="form-card card">
         <form id="sale-form" novalidate>
           <div class="form-grid">
@@ -83,7 +91,7 @@ BT.pages.newSale = {
     function update() {
       var item = currentItem();
       var qty = parseInt(qtyIn.value, 10) || 0;
-      totalEl.textContent = ui.rwf(item.price * Math.max(qty, 0));
+      totalEl.textContent = ui.fmtMoney(item.price * Math.max(qty, 0));
       stockHint.textContent = item.stock + ' in stock' + (item.stock <= item.low ? ' · low, please restock' : '');
       custField.hidden = method() !== 'Credit';
     }
@@ -94,6 +102,8 @@ BT.pages.newSale = {
 
     el.querySelector('#sale-form').addEventListener('submit', function (e) {
       e.preventDefault();
+      if (BT.app.demoGuard()) return;
+
       var item = currentItem();
       var qty = parseInt(qtyIn.value, 10);
 
@@ -112,7 +122,7 @@ BT.pages.newSale = {
         method: method(),
         customerId: el.querySelector('#f-customer').value
       });
-      ui.toast('Sale saved — ' + ui.rwf(total));
+      ui.toast('Sale saved — ' + ui.fmtMoney(total));
       BT.router.navigate('dashboard');
     });
 

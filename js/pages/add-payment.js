@@ -17,7 +17,7 @@ BT.pages.addPayment = {
     var s = st.state;
 
     var options = s.customers.map(function (c) {
-      return `<option value="${c.id}" data-balance="${c.balance}">${ui.esc(c.name)} — owes ${ui.fmt(c.balance)}</option>`;
+      return `<option value="${c.id}" data-balance="${c.balance}">${ui.esc(c.name)} — owes ${ui.fmtMoney(c.balance)}</option>`;
     }).join('');
 
     var methods = ['Cash', 'MoMo', 'Bank'].map(function (m, i) {
@@ -25,6 +25,14 @@ BT.pages.addPayment = {
     }).join('');
 
     el.innerHTML = `
+      ${BT.app.demoMode() ? `
+      <div class="alert" role="status">
+        <i class="ti ti-info-circle" aria-hidden="true"></i>
+        <div class="alert-body">
+          <strong>Demo mode</strong>
+          <span>Sign in to record real payments — try it and see how the app works.</span>
+        </div>
+      </div>` : ''}
       <div class="form-card card">
         <form id="payment-form" novalidate>
           <div class="form-grid">
@@ -47,7 +55,7 @@ BT.pages.addPayment = {
           <div class="summary-box">
             <div>
               <p class="t-label">Remaining balance</p>
-              <p class="t-val" id="f-remaining">${ui.rwf(0)}</p>
+              <p class="t-val" id="f-remaining">${ui.fmtMoney(0)}</p>
             </div>
             <i class="ti ti-coin summary-icon" aria-hidden="true"></i>
           </div>
@@ -72,7 +80,7 @@ BT.pages.addPayment = {
       var opt = custSel.options[custSel.selectedIndex];
       var bal = parseFloat(opt.getAttribute('data-balance')) || 0;
       var amt = parseFloat(amtIn.value) || 0;
-      remEl.textContent = ui.rwf(Math.max(Math.round(bal - amt), 0));
+      remEl.textContent = ui.fmtMoney(Math.max(Math.round(bal - amt), 0));
     }
 
     custSel.addEventListener('change', update);
@@ -81,6 +89,8 @@ BT.pages.addPayment = {
 
     el.querySelector('#payment-form').addEventListener('submit', function (e) {
       e.preventDefault();
+      if (BT.app.demoGuard()) return;
+
       var amount = parseFloat(amtIn.value);
 
       if (!amount || amount <= 0) {
@@ -93,7 +103,7 @@ BT.pages.addPayment = {
         amount: amount,
         method: el.querySelector('#f-method .chip.selected').textContent.trim()
       });
-      ui.toast('Payment recorded — ' + ui.rwf(amount));
+      ui.toast('Payment recorded — ' + ui.fmtMoney(amount));
       BT.router.navigate('customers');
     });
 

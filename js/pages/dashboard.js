@@ -129,7 +129,7 @@ BT.pages.dashboard = {
 
           <div class="balance-card">
             <p class="balance-label">Closing balance</p>
-            <p class="balance-amount">${ui.rwf(st.closing())}</p>
+            <p class="balance-amount">${ui.fmtMoney(st.closing())}</p>
             <div class="balance-minis">
               <div><p class="bm-label">Opening</p><p class="bm-val">${ui.fmt(s.openingFloat)}</p></div>
               <div><p class="bm-label">Today's sales</p><p class="bm-val">${ui.fmt(st.todaySales())}</p></div>

@@ -6,8 +6,9 @@
         apply them immediately (theme + accent + language).
      2. Fetch /api/bootstrap (shop data) and /api/auth/me
         (session) in parallel.
-     3. Register pages and start the router. Pages under the
-        app shell require sign-in; visitors are sent to #/signin.
+     3. Register pages and start the router. The first screen is
+        the auth hub (sign in / sign up / forgot password); app
+        pages require sign-in and are gated by BT.app.gate.
    ============================================================ */
 
 window.BT = window.BT || {};
@@ -16,11 +17,27 @@ BT.app = (function () {
   'use strict';
 
   /* Routes that are NOT part of the app shell (no sign-in needed) */
-  var PUBLIC_ROUTES = ['home', 'signin', 'signup'];
+  var PUBLIC_ROUTES = ['home', 'signin', 'signup', 'forgot', 'reset'];
 
   /* Which route greets a signed-in user / a signed-out visitor */
   function defaultRoute() {
     return BT.auth && BT.auth.user ? 'dashboard' : 'home';
+  }
+
+  /* ---------- Demo mode ----------
+     When the API is unreachable (MySQL off, plain file://) the
+     store falls back to a localStorage snapshot so every page
+     keeps working. All write actions call BT.app.demoGuard()
+     first, which blocks with a helpful toast. */
+
+  function demoMode() {
+    return !BT.store.online;
+  }
+
+  function demoGuard() {
+    if (!demoMode()) return false;
+    BT.ui.toast('Offline demo mode — sign in to record real data');
+    return true;
   }
 
   /* ---------- Theme & accent ---------- */
@@ -106,6 +123,10 @@ BT.app = (function () {
 
   function registerPages() {
     BT.router.register('home', BT.pages.home);
+    BT.router.register('signin', BT.pages.signin);
+    BT.router.register('signup', BT.pages.signup);
+    BT.router.register('forgot', BT.pages.forgot);
+    BT.router.register('reset', BT.pages.reset);
     BT.router.register('dashboard', BT.pages.dashboard);
     BT.router.register('new-sale', BT.pages.newSale);
     BT.router.register('new-expense', BT.pages.newExpense);
@@ -115,24 +136,26 @@ BT.app = (function () {
     BT.router.register('add-payment', BT.pages.addPayment);
     BT.router.register('expenses', BT.pages.expenses);
     BT.router.register('notifications', BT.pages.notifications);
-    BT.router.register('signin', BT.pages.signin);
-    BT.router.register('signup', BT.pages.signup);
     BT.router.register('settings', BT.pages.settings);
     BT.router.register('profile', BT.pages.profile);
     BT.router.register('boxes', BT.pages.boxes);
   }
 
-  /* Signed-in users skip the landing page; visitors can't open
-     app pages (they get redirected to the sign-in screen). */
+  /* Signed-in users skip the auth screens; visitors can't open
+     app pages (they get redirected to the auth hub). Exported so
+     the router can call it before every render. */
   function gate(r) {
     var signedIn = !!(BT.auth && BT.auth.user);
 
-    if (r.name === 'home' && signedIn) {
-      BT.router.navigate('dashboard');
-      return null;
+    if (PUBLIC_ROUTES.indexOf(r.name) !== -1) {
+      if (signedIn) {
+        BT.router.navigate('dashboard');
+        return null;
+      }
+      return r;
     }
-    if (PUBLIC_ROUTES.indexOf(r.name) === -1 && !signedIn) {
-      BT.router.navigate('signin');
+    if (!signedIn) {
+      BT.router.navigate('home');
       return null;
     }
     return r;
@@ -158,6 +181,24 @@ BT.app = (function () {
 
     var signOutBtn = document.getElementById('signout-btn');
     if (signOutBtn) signOutBtn.addEventListener('click', signOut);
+
+    /* The account chip in the sidebar opens the signed-in
+       user's profile — never the sign-in page. */
+    var chip = document.getElementById('account-chip');
+    if (chip) chip.addEventListener('click', function (e) {
+      e.preventDefault();
+      navigateAfterAuth();
+    });
+  }
+
+  /* Where a signed-in user should land (profile needs a session;
+     otherwise the auth hub takes over via the gate). */
+  function navigateAfterAuth() {
+    if (BT.auth && BT.auth.user) {
+      BT.router.navigate('profile');
+    } else {
+      BT.router.navigate('home');
+    }
   }
 
   function init() {
@@ -210,6 +251,10 @@ BT.app = (function () {
     applyAllPrefs: applyAllPrefs,
     updateUserChip: updateUserChip,
     signOut: signOut,
-    setStatus: setStatus
+    setStatus: setStatus,
+    gate: gate,
+    demoMode: demoMode,
+    demoGuard: demoGuard,
+    navigateAfterAuth: navigateAfterAuth
   };
 })();

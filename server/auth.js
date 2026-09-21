@@ -62,6 +62,18 @@ function clearCookie() {
   return COOKIE + '=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0';
 }
 
+/* ---------- password reset tokens ---------- */
+
+const RESET_MINUTES = 30;
+
+function createResetToken(userId) {
+  const token = crypto.randomBytes(24).toString('hex');
+  return db.query(
+    'INSERT INTO password_resets (token, user_id, expires_at) ' +
+    'VALUES (?, ?, NOW() + INTERVAL ' + RESET_MINUTES + ' MINUTE)', [token, userId]
+  ).then(function () { return token; });
+}
+
 /* ---------- session store (MySQL) ---------- */
 
 function createSession(userId) {
@@ -102,5 +114,6 @@ module.exports = {
   clearCookie: clearCookie,
   createSession: createSession,
   destroySession: destroySession,
-  currentUser: currentUser
+  currentUser: currentUser,
+  createResetToken: createResetToken
 };

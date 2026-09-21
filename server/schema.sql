@@ -40,6 +40,17 @@ CREATE TABLE IF NOT EXISTS sessions (
     REFERENCES users(id) ON DELETE CASCADE
 );
 
+/* Single-use tokens behind "Forgot password?" (30-minute life) */
+CREATE TABLE IF NOT EXISTS password_resets (
+  token      CHAR(48) PRIMARY KEY,
+  user_id    INT       NOT NULL,
+  used       TINYINT   NOT NULL DEFAULT 0,
+  created_at DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME  NOT NULL,
+  CONSTRAINT fk_reset_user FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- ---------- Core tables ----------
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -79,7 +90,7 @@ CREATE TABLE IF NOT EXISTS sales (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   number      INT         NOT NULL,
   customer_id VARCHAR(40) NULL,
-  method      ENUM('Cash','MoMo','Credit') NOT NULL,
+  method      ENUM('Cash','MoMo','Bank','Credit') NOT NULL,
   total       INT         NOT NULL,
   created_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_sale_customer FOREIGN KEY (customer_id)
@@ -131,6 +142,8 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
 -- (Numbers mirror the original demo: revenue this month 258,000 ·
 --  expenses this month 86,400 · today's cash-out 7,000)
 
+DELETE FROM password_resets;
+DELETE FROM sessions;
 DELETE FROM ledger_entries;
 DELETE FROM sale_items;
 DELETE FROM sales;
@@ -284,9 +297,10 @@ INSERT INTO ledger_entries (label, type, amount, method, category, created_at) V
   ('Plastic bags',  'out',    800, 'Cash', 'Stock',    CONCAT(CURDATE(), ' 16:40:00'));
 
 -- ---------- Demo account ----------
--- Password: demo1234  (PBKDF2-SHA512, 150k iterations, salt shown)
--- INSERT IGNORE keeps the account when the seed re-runs.
+-- Password: demo1234  (PBKDF2-SHA512, 150k iterations, static salt)
+-- INSERT IGNORE keeps the account when the seed re-runs; seed.js
+-- always refreshes the hash with the machine's own secret anyway.
 INSERT IGNORE INTO users (name, email, password_hash, role, shop_name) VALUES
   ('Demo Owner', 'demo@biztrack.app',
-   'b1a2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90:REPLACED_AT_SEED_TIME',
+   'a4c9e2f17b8d63504a19c7e2f17b8d63:80369042a73a2b2908a9549248bf7f0226e5a8f662801a8e1039d0ca4039311f417b78ea46b045dbd1ac06f633e9c9292847bfa93b39d9b93fb564ef6006fba1',
    'owner', 'KDN Shop');

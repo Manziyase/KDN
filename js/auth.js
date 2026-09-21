@@ -46,12 +46,24 @@ BT.auth = (function () {
     });
   }
 
+  /* Ask for a password-reset token, then (with it) set a new
+     password. Two calls because the UI shows them as two steps. */
+  function requestReset(email) {
+    return BT.api.post('/auth/forgot', { email: email });
+  }
+
+  function resetPassword(token, password) {
+    return BT.api.post('/auth/reset', { token: token, password: password });
+  }
+
   return {
     init: init,
     login: login,
     signup: signup,
     logout: logout,
     saveProfile: saveProfile,
+    requestReset: requestReset,
+    resetPassword: resetPassword,
     get user() { return user; },
     set user(v) { user = v; }
   };

@@ -33,7 +33,7 @@ BT.pages.customers = {
             </div>
           </td>
           <td>${ui.esc(c.lastPayment)}</td>
-          <td class="num ${c.balance > 0 ? 'neg' : ''}">${c.balance > 0 ? ui.rwf(c.balance) : '—'}</td>
+          <td class="num ${c.balance > 0 ? 'neg' : ''}">${c.balance > 0 ? ui.fmtMoney(c.balance) : '—'}</td>
           <td class="num"><a class="btn btn-sm" href="#/add-payment?customer=${c.id}">Record payment</a></td>
         </tr>`;
     }).join('');
@@ -50,7 +50,7 @@ BT.pages.customers = {
         </div>
         <div class="card stat">
           <p class="stat-label">Total owed</p>
-          <p class="stat-val ${owed > 0 ? 'neg' : ''}">${ui.rwf(owed)}</p>
+          <p class="stat-val ${owed > 0 ? 'neg' : ''}">${ui.fmtMoney(owed)}</p>
         </div>
       </div>
 

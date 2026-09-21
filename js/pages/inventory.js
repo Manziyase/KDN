@@ -143,6 +143,8 @@ BT.pages.inventory = {
 
     el.querySelector('#add-item-form').addEventListener('submit', function (e) {
       e.preventDefault();
+      if (BT.app.demoGuard()) return;
+
       var name = el.querySelector('#ai-name').value.trim();
       var price = ui.parseNum(el.querySelector('#ai-price').value);
       var stock = Math.max(0, Math.round(Number(el.querySelector('#ai-stock').value) || 0));
@@ -161,7 +163,7 @@ BT.pages.inventory = {
       });
     });
 
-    /* ---------- Restock wiring ---------- */
+    /* ---------- Restock wiring (modal dialog) ---------- */
 
     el.addEventListener('click', function (e) {
       var btn = e.target.closest('.restock-btn');
@@ -172,25 +174,100 @@ BT.pages.inventory = {
       var item = st.state.items.find(function (i) { return i.id === id; });
       if (!item) return;
 
-      var qtyStr = window.prompt('Restock "' + name + '" — how many units?', '10');
-      if (qtyStr === null) return;
-      var qty = Math.round(Number(qtyStr) || 0);
-      if (qty <= 0) return ui.toast('Enter a valid quantity');
+      var payOptions = ['Cash', 'MoMo', 'Bank'].map(function (m, i) {
+        return `<button type="button" class="chip${i === 0 ? ' selected' : ''}">${m}</button>`;
+      }).join('');
 
-      var method = window.prompt(
-        'Paid from which box? Type Cash, MoMo or Bank', 'Cash');
-      if (method === null) return;
-      method = String(method).trim().toLowerCase();
-      if (method === 'momo') method = 'MoMo';
-      else if (method === 'bank') method = 'Bank';
-      else if (method === 'cash') method = 'Cash';
-      else return ui.toast('Choose Cash, MoMo or Bank');
+      var m = ui.modal(`
+        <div class="modal-head">
+          <h2><i class="ti ti-package" aria-hidden="true"></i> Restock ${ui.esc(name)}</h2>
+          <button class="icon-btn" type="button" data-close="1" aria-label="Close">
+            <i class="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="restock-summary">
+            <div><small>Now in stock</small><b>${item.stock}</b></div>
+            <i class="ti ti-arrow-right" aria-hidden="true"></i>
+            <div><small>After restock</small><b id="rs-after">${item.stock}</b></div>
+          </div>
 
-      var cost = item.price * qty;
-      st.restock(id, qty, method).then(function (ok) {
-        if (ok === false) return;
-        ui.toast('Restocked ' + qty + ' × ' + name + ' for ' + ui.fmtMoney(cost));
-        BT.router.render();
+          <form id="restock-form" novalidate>
+            <div class="form-grid">
+              <div class="field">
+                <label for="rs-qty">Units to add</label>
+                <div class="qty-stepper">
+                  <button type="button" class="qty-btn" id="rs-minus" aria-label="Less">−</button>
+                  <input id="rs-qty" type="number" min="1" step="1" value="10" inputmode="numeric">
+                  <button type="button" class="qty-btn" id="rs-plus" aria-label="More">+</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>Pay from</label>
+                <div class="chips" id="rs-method">${payOptions}</div>
+              </div>
+            </div>
+
+            <div class="summary-box">
+              <div>
+                <p class="t-label">Cost (${ui.fmt(item.price)} × qty)</p>
+                <p class="t-val" id="rs-cost">${ui.fmtMoney(item.price * 10)}</p>
+              </div>
+              <i class="ti ti-package summary-icon" aria-hidden="true"></i>
+            </div>
+
+            <p class="hint">The cost is booked as a Stock expense and the box you
+            pay with is reduced right away.</p>
+
+            <p class="auth-error" id="rs-error" hidden></p>
+            <div class="modal-actions">
+              <button class="btn" type="button" data-close="1">Cancel</button>
+              <button class="btn btn-primary" type="submit">
+                <i class="ti ti-check" aria-hidden="true"></i> Restock
+              </button>
+            </div>
+          </form>
+        </div>`);
+
+      var qtyIn = m.el.querySelector('#rs-qty');
+      var costEl = m.el.querySelector('#rs-cost');
+      var afterEl = m.el.querySelector('#rs-after');
+      var errEl = m.el.querySelector('#rs-error');
+
+      function qty() { return Math.max(0, Math.round(Number(qtyIn.value) || 0)); }
+
+      function update() {
+        costEl.textContent = ui.fmtMoney(item.price * qty());
+        afterEl.textContent = item.stock + qty();
+      }
+
+      m.el.querySelector('#rs-minus').addEventListener('click', function () {
+        qtyIn.value = Math.max(1, qty() - 1);
+        update();
+      });
+      m.el.querySelector('#rs-plus').addEventListener('click', function () {
+        qtyIn.value = qty() + 1;
+        update();
+      });
+      qtyIn.addEventListener('input', update);
+      BT.ui.bindChips(m.el.querySelector('#rs-method'));
+
+      m.el.querySelector('#restock-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var n = qty();
+        if (n < 1) {
+          errEl.textContent = 'Enter how many units you bought.';
+          errEl.hidden = false;
+          return;
+        }
+        var method = m.el.querySelector('#rs-method .chip.selected').textContent.trim();
+
+        st.restock(id, n, method).then(function (ok) {
+          if (ok === false) return; /* error already surfaced by the store */
+          m.close();
+          ui.toast('Restocked ' + n + ' × ' + name + ' for ' + ui.fmtMoney(item.price * n));
+          BT.router.render();
+        });
       });
     });
   }

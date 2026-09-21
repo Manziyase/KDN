@@ -16,6 +16,14 @@ BT.pages.newExpense = {
     var categories = ['Transport', 'Stock', 'Airtime', 'Staff', 'Rent', 'Other'];
 
     el.innerHTML = `
+      ${BT.app.demoMode() ? `
+      <div class="alert" role="status">
+        <i class="ti ti-info-circle" aria-hidden="true"></i>
+        <div class="alert-body">
+          <strong>Demo mode</strong>
+          <span>Sign in to record real expenses — try it and see how the app works.</span>
+        </div>
+      </div>` : ''}
       <div class="form-card card">
         <form id="expense-form" novalidate>
           <div class="form-grid">
@@ -63,6 +71,8 @@ BT.pages.newExpense = {
 
     el.querySelector('#expense-form').addEventListener('submit', function (e) {
       e.preventDefault();
+      if (BT.app.demoGuard()) return;
+
       var amount = ui.parseNum(el.querySelector('#f-amount').value);
 
       if (!amount || amount <= 0) {

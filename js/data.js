@@ -99,22 +99,41 @@ window.BT = window.BT || {};
     /* true once /api/bootstrap has answered successfully */
     online: false,
 
-    /* ---------- Boot ---------- */
+  /* ---------- Boot ---------- */
 
-    init: function () {
-      var self = this;
-      if (!BT.api) return Promise.resolve(false);
+  init: function () {
+    var self = this;
+    if (!BT.api) return Promise.resolve(false);
 
-      return BT.api.get('/bootstrap').then(function (data) {
-        self.state = data;
-        self.online = true;
-        self.save(); /* cache the snapshot for offline fallback */
-        return true;
-      }).catch(function () {
-        console.warn('[BizTrack] API unreachable — running in offline demo mode.');
-        return false;
-      });
-    },
+    return BT.api.get('/bootstrap').then(function (data) {
+      self.state = data;
+      self.online = true;
+      self.save(); /* cache the snapshot for offline fallback */
+      return true;
+    }).catch(function () {
+      console.warn('[BizTrack] API unreachable — running in offline demo mode.');
+      self.online = false;
+      return false;
+    });
+  },
+
+  /* Retry the server after a failed boot (used by the "Try to
+     reconnect" button on the auth hub). Resolves true when the
+     API answers, false when it still isn't there. */
+  reconnect: function () {
+    var self = this;
+    if (!BT.api) return Promise.resolve(false);
+    return BT.api.get('/bootstrap').then(function (data) {
+      self.state = data;
+      self.online = true;
+      self.save();
+      return true;
+    }).catch(function () { return false; });
+  },
+
+  /* ---------- Money boxes (offline/demo fallback only —
+     online, the server returns authoritative boxes on every
+     action and they are assigned straight into state.boxes) */
 
     /* ---------- Preferences (currency / language / theme) ---------- */
 
@@ -152,6 +171,26 @@ window.BT = window.BT || {};
       return b.cash + b.bank + b.momo + b.credit;
     },
 
+    /* The box a payment method lands in / leaves from.
+       Unknown methods (e.g. 'Credit') return null — credit is
+       tracked per-customer, never as cash in a box. */
+    boxForMethod: function (method) {
+      if (method === 'MoMo') return 'momo';
+      if (method === 'Bank') return 'bank';
+      if (method === 'Cash' || method === undefined || method === null) return 'cash';
+      return null;
+    },
+
+    /* Add/subtract an amount from one physical box (offline only).
+       A method of 'Credit' (or anything unknown) is ignored. */
+    boxMove: function (method, amount, sign) {
+      var b = this.state.boxes;
+      if (!b) return;
+      var box = this.boxForMethod(method);
+      if (!box) return;
+      b[box] = Math.max(0, (b[box] || 0) + sign * amount);
+    },
+
     save: function () {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
@@ -174,7 +213,7 @@ window.BT = window.BT || {};
 
     todaySales: function () {
       return this.state.ledger.reduce(function (sum, e) {
-        return e.type === 'in' ? sum + e.amount : sum;
+        return (e.type === 'in' || e.type === 'credit') ? sum + e.amount : sum;
       }, 0);
     },
 
@@ -241,6 +280,13 @@ window.BT = window.BT || {};
         method: sale.method
       };
       this.state.ledger.push(entry);
+
+      /* A paid sale lands in the box matching its method (Cash →
+         cash box, MoMo → momo box, Bank → bank box). Credit sales
+         are not real money yet — they live in the credit box via
+         the customer's balance. */
+      this.boxMove(sale.method, total, +1);
+      this.state.revenuePeriod += total;
       this.save();
 
       if (this.online && BT.api) {
@@ -252,10 +298,14 @@ window.BT = window.BT || {};
           if (!r || r.ok === false) return;
           Object.assign(item, r.item);
           if (cust && r.customer) cust.balance = r.customer.balance;
+          if (!cust && r.customer === null) cust = null;
           var i = self.state.ledger.indexOf(entry);
           if (i !== -1) self.state.ledger[i] = r.ledgerEntry;
-          self.state.revenuePeriod = r.period.revenue;
-          self.state.expensesPeriod = r.period.expenses;
+          if (r.period) {
+            self.state.revenuePeriod = r.period.revenue;
+            self.state.expensesPeriod = r.period.expenses;
+          }
+          if (r.boxes) self.state.boxes = r.boxes; /* server is authoritative */
           self.state.saleCounter = Math.max(self.state.saleCounter, r.saleNumber + 1);
           self.save();
         }).catch(function (err) {
@@ -274,16 +324,14 @@ window.BT = window.BT || {};
         label: exp.note || exp.category,
         type: 'out',
         amount: amount,
+        method: exp.method,
         category: exp.category
       };
       this.state.ledger.push(entry);
       this.state.expensesPeriod += amount;
-      this.state.expenseCounter++;
-      var b = this.state.boxes;
-      if (b) {
-        var box = exp.method === 'MoMo' ? 'momo' : exp.method === 'Bank' ? 'bank' : 'cash';
-        b[box] = Math.max(0, b[box] - amount);
-      }
+      this.state.expenseCounter = (this.state.expenseCounter || 0) + 1;
+      /* money leaves the box it was paid from */
+      this.boxMove(exp.method, amount, -1);
       this.save();
 
       if (this.online && BT.api) {
@@ -322,11 +370,7 @@ window.BT = window.BT || {};
       if (local.stock > 0) {
         var cost = local.price * local.stock;
         this.state.expensesPeriod += cost;
-        var b0 = this.state.boxes;
-        if (b0) {
-          var bx = prod.method === 'MoMo' ? 'momo' : prod.method === 'Bank' ? 'bank' : 'cash';
-          b0[bx] = Math.max(0, b0[bx] - cost);
-        }
+        this.boxMove(prod.method, cost, -1);
         this.state.ledger.push({
           time: nowTime(), label: 'Stock purchase · ' + local.name,
           type: 'out', amount: cost, method: prod.method, category: 'Stock'
@@ -359,14 +403,11 @@ window.BT = window.BT || {};
       var item = this.state.items.find(function (i) { return i.id === itemId; });
       if (!item) return Promise.resolve(false);
 
-      var cost = item.price * Math.max(1, Math.round(qty));
-      item.stock += Math.max(1, Math.round(qty));
+      qty = Math.max(1, Math.round(qty));
+      var cost = item.price * qty;
+      item.stock += qty;
       this.state.expensesPeriod += cost;
-      var b = this.state.boxes;
-      if (b) {
-        var box = method === 'MoMo' ? 'momo' : method === 'Bank' ? 'bank' : 'cash';
-        b[box] = Math.max(0, b[box] - cost);
-      }
+      this.boxMove(method, cost, -1);
       this.state.ledger.push({
         time: nowTime(), label: 'Restock · ' + item.name,
         type: 'out', amount: cost, method: method, category: 'Stock'
@@ -395,17 +436,18 @@ window.BT = window.BT || {};
       return Promise.resolve(true);
     },
 
-    /* Move money between the physical boxes (cash/bank/momo). */
+    /* Move money between the physical boxes (cash/bank/momo).
+       Never changes the total — only where the money sits. */
     transferBoxes: function (from, to, amount) {
       var self = this;
       var amt = Math.max(0, Math.round(amount));
       var b = this.state.boxes;
-      if (!b || !amt || from === to || (b[from] || 0) < amt) return false;
+      if (!b || !amt || from === to || !b[from] || b[from] < amt) return false;
       b[from] -= amt;
       b[to] = (b[to] || 0) + amt;
       this.state.ledger.push({
         time: nowTime(),
-        label: 'Transfer ' + from + ' → ' + to,
+        label: from.charAt(0).toUpperCase() + from.slice(1) + ' → ' + to.charAt(0).toUpperCase() + to.slice(1) + ' transfer',
         type: 'info', amount: amt, method: to, category: 'Transfer'
       });
       this.save();
@@ -442,11 +484,8 @@ window.BT = window.BT || {};
         method: pay.method
       };
       this.state.ledger.push(entry);
-      var b = this.state.boxes;
-      if (b) {
-        var box = pay.method === 'MoMo' ? 'momo' : pay.method === 'Bank' ? 'bank' : 'cash';
-        b[box] = (b[box] || 0) + amount;
-      }
+      /* the received money lands in the box it was paid into */
+      this.boxMove(pay.method, amount, +1);
       this.save();
 
       if (this.online && BT.api) {

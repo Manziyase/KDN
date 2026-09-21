@@ -37,7 +37,7 @@ BT.pages.notifications = {
           tint: 'pink',
           icon: 'ti-coin',
           title: 'Credit reminder · ' + ui.esc(c.name),
-          sub: ui.rwf(c.balance) + ' outstanding · last payment ' + ui.esc(c.lastPayment),
+          sub: ui.fmtMoney(c.balance) + ' outstanding · last payment ' + ui.esc(c.lastPayment),
           badge: '<span class="badge low">Follow up</span>',
           href: '#/add-payment?customer=' + c.id
         });

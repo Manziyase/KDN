@@ -77,6 +77,38 @@ BT.ui = (function () {
     });
   }
 
+  /* ---------- Modal ----------
+     Small centered dialog with overlay. Usage:
+       var close = ui.modal(html);
+       … wire the contents …
+       close();            // remove it
+     Pressing Escape or the overlay also closes it. */
+  function modal(html) {
+    var wrap = document.createElement('div');
+    wrap.className = 'modal-wrap';
+    wrap.innerHTML =
+      '<div class="modal-overlay" data-close="1"></div>' +
+      '<div class="modal-card card" role="dialog" aria-modal="true">' + html + '</div>';
+    document.body.appendChild(wrap);
+    document.body.classList.add('modal-open');
+
+    function close() {
+      document.removeEventListener('keydown', onKey);
+      document.body.classList.remove('modal-open');
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') close();
+    }
+
+    wrap.addEventListener('click', function (e) {
+      if (e.target.closest('[data-close]')) close();
+    });
+    document.addEventListener('keydown', onKey);
+
+    return { close: close, el: wrap.querySelector('.modal-card') };
+  }
+
   return {
     esc: esc,
     fmt: fmt,
@@ -85,6 +117,7 @@ BT.ui = (function () {
     currency: currency,
     parseNum: parseNum,
     toast: toast,
-    bindChips: bindChips
+    bindChips: bindChips,
+    modal: modal
   };
 })();

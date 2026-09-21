@@ -29,7 +29,7 @@ BT.pages.expenses = {
       <div class="stat-row">
         <div class="card stat">
           <p class="stat-label">Spent today</p>
-          <p class="stat-val">${ui.rwf(total)}</p>
+          <p class="stat-val">${ui.fmtMoney(total)}</p>
         </div>
         <div class="card stat">
           <p class="stat-label">Entries</p>
@@ -37,7 +37,7 @@ BT.pages.expenses = {
         </div>
         <div class="card stat">
           <p class="stat-label">This month</p>
-          <p class="stat-val">${ui.rwf(s.expensesPeriod)}</p>
+          <p class="stat-val">${ui.fmtMoney(s.expensesPeriod)}</p>
         </div>
       </div>
 

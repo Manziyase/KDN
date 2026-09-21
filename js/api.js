@@ -16,9 +16,17 @@ BT.api = (function () {
     ? 'http://localhost:3000/api'
     : '/api';
 
+  /* The session cookie is HttpOnly — fetch must send it. Same-origin
+     requests do this by default; cross-origin (file:// → :3000) needs
+     explicit credentials + a non-wildcard CORS origin, so ask the
+     server to echo ours. (The server keeps the wildcard default and
+     reflects the Origin header when credentials are required.) */
+  var CROSS = BASE.indexOf('http') === 0;
+
   function request(method, path, body) {
     return fetch(BASE + path, {
       method: method,
+      credentials: CROSS ? 'include' : 'same-origin',
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined
     }).then(function (res) {

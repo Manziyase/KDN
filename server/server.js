@@ -36,9 +36,18 @@ const ROOT = path.join(__dirname, '..');
 app.use(express.json());
 
 /* Small CORS allowance so the frontend also works when opened
-   directly as a file (file://) while the API runs on :3000 */
+   directly as a file (file://) while the API runs on :3000.
+   When the browser sends credentials (cookies) the wildcard is
+   not allowed, so we reflect the request's own Origin instead. */
 app.use(function (req, res, next) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -167,6 +176,16 @@ const ALLOWED_PREFS = {
   accent: ['navy', 'emerald', 'violet', 'amber', 'rose', 'slate']
 };
 
+/* GET /api/health — is MySQL answering? Powers the status pill
+   on the auth hub so users see exactly what's wrong. */
+app.get('/api/health', function (req, res) {
+  db.query('SELECT 1 AS ok').then(function () {
+    res.json({ ok: true, database: true });
+  }).catch(function (err) {
+    res.json({ ok: true, database: false, error: err.message });
+  });
+});
+
 app.post('/api/prefs', function (req, res) {
   auth.currentUser(req).then(function (user) {
     if (!user) throw new Error('Please sign in first');
@@ -183,6 +202,67 @@ app.post('/api/prefs', function (req, res) {
     params.push(user.id);
     return db.query('UPDATE users SET ' + sets.join(', ') + ' WHERE id = ?', params)
       .then(function () { res.json({ ok: true }); });
+  }).catch(function (err) { fail(res, 400, err.message); });
+});
+
+/* ============================================================
+   Forgot / reset password
+   ============================================================ */
+
+/* POST /api/auth/forgot — always answers ok (never leaks whether
+   an email exists). When there IS an account, creates a reset
+   token and returns it + a local link; on a small local network
+   there is no mail server, so the app hands the link to the
+   shop owner directly. */
+app.post('/api/auth/forgot', function (req, res) {
+  const body = req.body || {};
+  const email = String(body.email || '').trim().toLowerCase();
+
+  if (!auth.validEmail(email)) {
+    return fail(res, 400, 'Please enter a valid email address');
+  }
+
+  db.query('SELECT id, name FROM users WHERE email = ?', [email]).then(function (rows) {
+    if (!rows.length) return { found: false, message: 'If an account exists for ' + email +
+      ', a reset link was generated. Check with the shop owner.' };
+
+    const token = auth.createResetToken(rows[0].id);
+    return token.then(function (t) {
+      return {
+        found: true,
+        resetToken: t,
+        resetLink: '/#/reset?token=' + encodeURIComponent(t),
+        message: 'Reset link created below. Open it to choose a new password.'
+      };
+    });
+  }).then(function (out) {
+    res.json(Object.assign({ ok: true }, out));
+  }).catch(function (err) { fail(res, 500, err.message); });
+});
+
+/* POST /api/auth/reset — swap a reset token for a new password. */
+app.post('/api/auth/reset', function (req, res) {
+  const body = req.body || {};
+  const token = String(body.token || '');
+  const password = String(body.password || '');
+
+  if (password.length < 8) return fail(res, 400, 'Password must be at least 8 characters');
+
+  db.withTransaction(function (exec) {
+    return exec(
+      'SELECT pr.user_id, pr.token FROM password_resets pr ' +
+      'JOIN users u ON u.id = pr.user_id ' +
+      'WHERE pr.token = ? AND pr.used = 0 AND pr.expires_at > NOW()', [token]
+    ).then(function (r) {
+      const row = r[0][0];
+      if (!row) throw new Error('This reset link is invalid or has expired — request a new one');
+      return exec('UPDATE users SET password_hash = ? WHERE id = ?',
+        [auth.hashPassword(password), row.user_id]);
+    }).then(function () {
+      return exec('UPDATE password_resets SET used = 1 WHERE token = ?', [token]);
+    });
+  }).then(function () {
+    res.json({ ok: true });
   }).catch(function (err) { fail(res, 400, err.message); });
 });
 
@@ -308,6 +388,8 @@ app.post('/api/boxes/transfer', function (req, res) {
     if (from === to) throw new Error('Choose two different boxes');
 
     const FROM = from.replace('_box', ''), TO = to.replace('_box', '');
+    const label = FROM.charAt(0).toUpperCase() + FROM.slice(1) + ' → ' +
+      TO.charAt(0).toUpperCase() + TO.slice(1) + ' transfer';
 
     return db.withTransaction(function (exec) {
       return exec('SELECT cash_box, bank_box, momo_box FROM settings WHERE id = 1 FOR UPDATE')
@@ -710,11 +792,32 @@ app.use(function (err, req, res, next) { /* eslint-disable-line no-unused-vars *
   fail(res, 500, 'Server error');
 });
 
-/* ---------- start ---------- */
+/* ---------- start ----------
 
-app.listen(config.port, function () {
-  console.log('');
-  console.log('  BizTrack Lite running →  http://localhost:' + config.port);
-  console.log('  MySQL: %s@%s:%s/%s', config.db.user, config.db.host, config.db.port, config.db.database);
-  console.log('');
-});
+   Before accepting traffic we make sure the database actually
+   exists and has its tables + demo data. This is what makes
+   "start MySQL in XAMPP, then npm start" just work: no separate
+   `npm run seed` step required. */
+
+seed()
+  .then(function () {
+    app.listen(config.port, function () {
+      console.log('');
+      console.log('  BizTrack Lite running →  http://localhost:' + config.port);
+      console.log('  MySQL: %s@%s:%s/%s', config.db.user, config.db.host, config.db.port, config.db.database);
+      console.log('');
+    });
+  })
+  .catch(function (err) {
+    console.error('');
+    console.error('  ✖ Could not reach MySQL — the app cannot start.');
+    console.error('    ' + err.message);
+    console.error('');
+    console.error('    • Open the XAMPP Control Panel and press Start on MySQL.');
+    console.error('    • Connection settings live in server/config.js' +
+      ' (currently ' + config.db.user + '@' + config.db.host + ':' + config.db.port + ').');
+    console.error('    • If the password is set, run:' +
+      ' set DB_PASSWORD=your-password && npm start');
+    console.error('');
+    process.exit(1);
+  });

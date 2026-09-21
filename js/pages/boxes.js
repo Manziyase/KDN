@@ -6,8 +6,10 @@
      • Bank box — money in the bank account
      • MoMo box — Mobile Money wallet
      • Credit box — money customers still owe (not spendable)
-   Includes moving money between the real boxes (a deposit,
-   a withdrawal, a wallet top-up…).
+
+   Each box shows what happened to it TODAY (in / out). Below,
+   the transfer form moves money between the real boxes and
+   validates against the live balance before submitting.
    ============================================================ */
 
 window.BT = window.BT || {};
@@ -21,13 +23,45 @@ BT.pages.boxes = {
     var st = BT.store;
     var b = st.boxes();
 
-    var boxCard = function (icon, tint, label, value, hint) {
+    /* ---------- what happened to each box today? ---------- */
+
+    var moves = { cash: 0, bank: 0, momo: 0 };
+    var transfers = [];
+
+    st.state.ledger.forEach(function (e) {
+      if (e.category === 'Transfer') {
+        /* transfers move money between boxes — the net effect on
+           each is already in state.boxes, skip for the daily flow */
+        transfers.push(e);
+        return;
+      }
+      if (e.type === 'in' || e.type === 'credit') {
+        var box = st.boxForMethod(e.method);
+        if (box) moves[box] += e.amount;
+      } else if (e.type === 'out') {
+        var boxOut = st.boxForMethod(e.method);
+        if (boxOut) moves[boxOut] -= e.amount;
+      }
+    });
+
+    var boxCard = function (icon, tint, label, value, hint, today) {
+      var flow;
+      if (today > 0) {
+        flow = '<p class="box-today pos"><i class="ti ti-arrow-up" aria-hidden="true"></i> +' +
+          ui.fmt(today) + ' today</p>';
+      } else if (today < 0) {
+        flow = '<p class="box-today neg"><i class="ti ti-arrow-down" aria-hidden="true"></i> −' +
+          ui.fmt(Math.abs(today)) + ' today</p>';
+      } else {
+        flow = '<p class="box-today"><i class="ti ti-minus" aria-hidden="true"></i> no movement today</p>';
+      }
       return `
         <div class="card box-card">
           <div class="kpi-icon tint-${tint}"><i class="ti ${icon}" aria-hidden="true"></i></div>
           <div class="box-main">
             <p class="box-label">${label}</p>
             <p class="box-amount">${ui.fmtMoney(value)}</p>
+            ${flow}
             <p class="box-hint">${hint}</p>
           </div>
         </div>`;
@@ -39,12 +73,24 @@ BT.pages.boxes = {
       return `<option value="${value}">${label}</option>`;
     };
 
+    var transferHistory = transfers.slice(-5).reverse().map(function (e) {
+      return `
+        <div class="list-row">
+          <span class="row-icon tint-blue"><i class="ti ti-arrows-exchange" aria-hidden="true"></i></span>
+          <div class="row-main">
+            <strong>${ui.esc(e.label)}</strong>
+            <small>${e.time}${e.category ? ' · ' + ui.esc(e.category) : ''}</small>
+          </div>
+          <span class="row-amt">${ui.fmt(e.amount)}</span>
+        </div>`;
+    }).join('');
+
     el.innerHTML = `
       <div class="stat-row">
-        ${boxCard('ti-cash', 'green', 'Cash box', b.cash, 'Physical money in the shop')}
-        ${boxCard('ti-building-bank', 'blue', 'Bank box', b.bank, 'Money in the bank account')}
-        ${boxCard('ti-device-mobile', 'purple', 'MoMo box', b.momo, 'Mobile Money wallet')}
-        ${boxCard('ti-users', 'amber', 'Credit box', b.credit, 'Owed by customers — not spendable')}
+        ${boxCard('ti-cash', 'green', 'Cash box', b.cash, 'Physical money in the shop', moves.cash)}
+        ${boxCard('ti-building-bank', 'blue', 'Bank box', b.bank, 'Money in the bank account', moves.bank)}
+        ${boxCard('ti-device-mobile', 'purple', 'MoMo box', b.momo, 'Mobile Money wallet', moves.momo)}
+        ${boxCard('ti-users', 'amber', 'Credit box', b.credit, 'Owed by customers — not spendable', null)}
       </div>
 
       <div class="total-banner">
@@ -83,16 +129,28 @@ BT.pages.boxes = {
                   <div class="field span-2">
                     <label for="tr-amount">Amount (${ui.currency()})</label>
                     <input id="tr-amount" type="text" inputmode="numeric" placeholder="e.g. 50,000">
+                    <small class="field-hint" id="tr-balance"></small>
                   </div>
                 </div>
-                <button class="btn btn-primary" type="submit">
-                  <i class="ti ti-arrows-exchange" aria-hidden="true"></i> Transfer
-                </button>
+                <div class="transfer-actions">
+                  <button class="btn btn-primary" type="submit">
+                    <i class="ti ti-arrows-exchange" aria-hidden="true"></i> Transfer
+                  </button>
+                  <button class="btn" type="button" id="tr-swap" title="Swap direction">
+                    <i class="ti ti-arrows-diff" aria-hidden="true"></i> Swap
+                  </button>
+                </div>
                 <p class="hint">Tip: send money to the bank or top up MoMo from cash —
                 transfers never change your total, only where it sits.</p>
               </form>
             </div>
           </div>
+
+          ${transfers.length ? `
+          <div class="card">
+            <div class="card-head"><h2>Recent transfers</h2></div>
+            ${transferHistory}
+          </div>` : ''}
 
         </div>
 
@@ -127,11 +185,38 @@ BT.pages.boxes = {
         </div>
       </div>`;
 
+    /* ---------- transfer wiring ---------- */
+
+    var fromSel = el.querySelector('#tr-from');
+    var toSel = el.querySelector('#tr-to');
+    var amtIn = el.querySelector('#tr-amount');
+    var balHint = el.querySelector('#tr-balance');
+
+    function refreshBalanceHint() {
+      var boxes = st.state.boxes || {};
+      var bal = boxes[fromSel.value] || 0;
+      balHint.textContent = 'Available in this box: ' + ui.fmtMoney(bal);
+      balHint.classList.toggle('neg', bal <= 0);
+    }
+
+    function swap() {
+      var tmp = fromSel.value;
+      fromSel.value = toSel.value;
+      toSel.value = tmp;
+      refreshBalanceHint();
+    }
+
+    fromSel.addEventListener('change', refreshBalanceHint);
+    el.querySelector('#tr-swap').addEventListener('click', swap);
+    refreshBalanceHint();
+
     el.querySelector('#transfer-form').addEventListener('submit', function (e) {
       e.preventDefault();
-      var from = el.querySelector('#tr-from').value;
-      var to = el.querySelector('#tr-to').value;
-      var amount = ui.parseNum(el.querySelector('#tr-amount').value);
+      if (BT.app.demoGuard()) return;
+
+      var from = fromSel.value;
+      var to = toSel.value;
+      var amount = ui.parseNum(amtIn.value);
 
       if (from === to) {
         ui.toast('Choose two different boxes');
@@ -141,8 +226,9 @@ BT.pages.boxes = {
         ui.toast('Enter a valid amount');
         return;
       }
-      if ((st.state.boxes && (st.state.boxes[from] || 0) < amount)) {
-        ui.toast('Not enough in the ' + from + ' box');
+      var boxes = st.state.boxes || {};
+      if ((boxes[from] || 0) < amount) {
+        ui.toast('Not enough in the ' + from + ' box — available: ' + ui.fmtMoney(boxes[from] || 0));
         return;
       }
 
